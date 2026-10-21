@@ -24,6 +24,7 @@ const lint = () => {
 if (command === 'lint') {
   lint();
 } else if (command === 'build') {
+  node('scripts/ensure-electron.mjs');
   const icons = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(workspace, 'scripts/build-icons.ps1')], { cwd: workspace, stdio: 'inherit', windowsHide: true });
   if (icons.error) throw icons.error;
   if (icons.status !== 0) process.exit(icons.status || 1);

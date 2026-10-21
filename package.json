@@ -20,6 +20,7 @@
     "publish:local": "node scripts/publish-release.mjs"
   },
   "devDependencies": {
+    "@electron/get": "2.0.3",
     "electron": "32.1.0",
     "@types/numeral": "2.0.5",
     "@types/color-convert": "2.0.4",
