@@ -50,13 +50,14 @@ function omitKeys(records: WireLightingRecord[], keys: Set<number>) {
   }).filter(record => record.mask.some(Boolean));
 }
 export function createAnalogueFeedback(profile: string) {
-  let session: Session | undefined, last = '', lastAt = 0;
+  let session: Session | undefined, last = '', lastAt = 0, lastMode = '';
   const colors = new Map<string, number[]>();
   return {
-    async stop() { await restoreAnalogueLighting(profile); session = undefined; last = ''; lastAt = 0; colors.clear(); },
+    async stop() { await restoreAnalogueLighting(profile); session = undefined; last = ''; lastAt = 0; lastMode = ''; colors.clear(); },
     async update(settings: AnalogueProfile, overridden: number[], now: number, pending: number[] = []) {
       if (!settings.feedback.enabled) { if (session) await this.stop(); return; }
-      if (now - lastAt < 100) return;
+      const currentMode = JSON.stringify([overridden, pending]);
+      if (now - lastAt < 100 && currentMode === lastMode) return;
       if (!session) {
         const connection = await devices.connection(), raw = await devices.lighting();
         if (!connection.devicePath || raw.activeProfileIndex !== connection.activeProfileIndex) throw Error('Keyboard changed before lighting feedback');
@@ -110,6 +111,7 @@ export function createAnalogueFeedback(profile: string) {
         last = signature;
       }
       lastAt = now;
+      lastMode = currentMode;
     },
   };
 }

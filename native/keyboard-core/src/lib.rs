@@ -31,6 +31,7 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
         "--apply-runtime-lighting",
         "--remaps",
         "--apply-remap",
+        "--apply-remaps",
         "--apply-snap",
         "--apply-software-actuation",
     ]
@@ -50,6 +51,7 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
             && mode != "--apply-runtime-lighting"
             && mode != "--remaps"
             && mode != "--apply-remap"
+            && mode != "--apply-remaps"
             && mode != "--apply-snap"
             && mode != "--apply-software-actuation"
         {
@@ -63,6 +65,7 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
         "--apply-runtime-lighting",
         "--remaps",
         "--apply-remap",
+        "--apply-remaps",
         "--apply-snap",
         "--apply-software-actuation",
     ]
@@ -75,6 +78,8 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
             actuation::validate_software(&value)?;
         } else if mode == "--apply-snap" {
             snap::validate(&value)?;
+        } else if mode == "--apply-remaps" {
+            remap::validate_batch(&value)?;
         } else if mode == "--apply-remap" {
             remap::validate_edit(&value)?;
         } else if mode == "--apply-runtime-lighting" {
@@ -121,7 +126,7 @@ pub fn record_macro() -> Result<(), String> {
     recorder::run()
 }
 
-/// A process-local cache for fast sensor reads. No HID handle is retained while idle.
+/// Reuse the verified interface path; every operation still opens and checks its HID session.
 #[derive(Default)]
 pub struct DeviceSession {
     cached_path: Option<String>,
@@ -129,13 +134,18 @@ pub struct DeviceSession {
 }
 impl DeviceSession {
     pub fn execute(&mut self, arguments: &[String]) -> Result<serde_json::Value, String> {
-        let runtime = arguments.len() == 2 && arguments[0] == "--apply-runtime-lighting";
-        let edit = if runtime {
+        let edit_mode = arguments.len() == 2 && ["--apply-runtime-lighting", "--remaps", "--apply-remap", "--apply-remaps"].contains(&arguments[0].as_str());
+        let edit = if edit_mode {
             let value: serde_json::Value = serde_json::from_str(&arguments[1]).map_err(|e| e.to_string())?;
-            lighting::validate_runtime(&value)?;
+            match arguments[0].as_str() {
+                "--remaps" => remap::validate_read(&value)?,
+                "--apply-remap" => remap::validate_edit(&value)?,
+                "--apply-remaps" => remap::validate_batch(&value)?,
+                _ => lighting::validate_runtime(&value)?,
+            }
             Some(value)
         } else { None };
-        let fast = runtime || (arguments.len() == 1 && ["--sensors", "--current"].contains(&arguments[0].as_str()));
+        let fast = edit_mode || (arguments.len() == 1 && ["--sensors", "--current", "--connection"].contains(&arguments[0].as_str()));
         let result = if fast {
             if let Some(path) = self.cached_path.as_deref() {
                 (|| {
@@ -155,19 +165,32 @@ impl DeviceSession {
         } else {
             execute(arguments)
         };
-        if fast {
-            self.cached_path = result
-                .as_ref()
-                .ok()
-                .and_then(|value| value["devicePath"].as_str().map(String::from));
-        } else {
-            self.cached_path = None;
-        }
+        self.cached_path = result.as_ref().ok()
+            .and_then(|value| value["devicePath"].as_str().map(String::from));
         if result.is_err() {
             self.cached_path = None;
             self.owner_check = None;
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    #[test]
+    fn cached_remap_paths_validate_before_device_access() {
+        let mut session = DeviceSession::default();
+        session.cached_path = Some("invalid-fixture-path".into());
+        for (mode, payload) in [
+            ("--remaps", r#"{"wireIndex":9,"physicalKeys":[26]}"#),
+            ("--apply-remap", r#"{"wireIndex":4}"#),
+            ("--apply-remaps", "[]"),
+            ("--apply-runtime-lighting", "{}"),
+        ] {
+            let error = session.execute(&[mode.into(), payload.into()]).unwrap_err();
+            assert!(!error.contains("HID"), "Invalid request reached device access: {error}");
+        }
     }
 }
 

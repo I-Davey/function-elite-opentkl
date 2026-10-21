@@ -17,6 +17,7 @@ export type Operation =
   | '--apply-runtime-lighting'
   | '--remaps'
   | '--apply-remap'
+  | '--apply-remaps'
   | '--apply-snap'
   | '--apply-software-actuation';
 export type DeviceResult = Record<string, unknown>;
@@ -57,6 +58,7 @@ const MODES = new Set<string>([
   '--apply-runtime-lighting',
   '--remaps',
   '--apply-remap',
+  '--apply-remaps',
   '--apply-snap',
   '--apply-software-actuation',
 ]);

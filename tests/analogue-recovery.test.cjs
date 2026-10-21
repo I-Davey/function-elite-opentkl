@@ -64,6 +64,10 @@ test('feedback updates its existing journal and restores original reactive light
   assert.ok(colorFor(26)[0]>9&&colorFor(26)[0]<128,'Fade smooths changes towards the chosen brightness');
   await feedback.update(settings,[26,22],1800);
   assert.deepEqual(colorFor(26),[127,110,93],'Controller-off mode uses the same brightness scale');
+  const beforeToggle = liveWrites;
+  await feedback.update(settings,[],1810);
+  assert.equal(liveWrites,beforeToggle+1,'Mode changes bypass the 100 ms animation throttle');
+  assert.notDeepEqual(colorFor(26),[127,110,93]);
   await feedback.stop();
   assert.equal(reactive,original);
   assert.equal(storedWrites,3);

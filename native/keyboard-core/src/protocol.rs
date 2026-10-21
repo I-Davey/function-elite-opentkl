@@ -536,6 +536,50 @@ impl Keyboard {
             }
         })
     }
+    fn apply_remaps(&mut self, request: Value) -> Result<Value, String> {
+        crate::remap::validate_batch(&request)?;
+        let records = request.as_array().unwrap();
+        let active = records[0]["expectedActive"].as_u64().unwrap() as u8;
+        self.same_profile(active)?;
+        let mut changes = Vec::new();
+        // Compare every record before the first write; the host journals originals before calling us.
+        for record in records {
+            let slot = record["wireIndex"].as_u64().unwrap() as u8;
+            let args = vec![slot, crate::remap::canonical(record["physicalKey"].as_u64().unwrap())?, u8::from(record["fnLayer"].as_bool().unwrap())];
+            let (getter, setter, clear) = if record["level"] == 0 { (0x51,0x50,0x52) } else { (0x97,0x96,0x98) };
+            let before = self.query(getter, &args)?;
+            if before.len() < 2 || before[1] != slot || ![1,2].contains(&before[0]) || before[2..] != crate::lighting::bytes(&record["expectedData"])? {
+                return Err("Remap transaction changed since backup".into());
+            }
+            let data = crate::remap::record(&record["data"])?;
+            if before[2..] != data { changes.push((slot,args,getter,setter,clear,data)); }
+        }
+        let mut attempted = false;
+        let result = (|| -> Result<(), String> {
+            for (slot,args,_,setter,clear,data) in &changes {
+                self.same_profile(active)?;
+                let mut arguments = args.clone();
+                let command = if data.is_empty() { arguments.push(0); *clear } else { arguments.extend(data); *setter };
+                self.authorized_write = Some((command, arguments.clone()));
+                attempted = true;
+                let acknowledgement = self.query(command, &arguments);
+                self.authorized_write = None;
+                if acknowledgement? != vec![1,*slot] { return Err("Remap transaction setter rejected".into()); }
+            }
+            for (slot,args,getter,_,_,data) in &changes {
+                let after = self.query(*getter, args)?;
+                if after.len() < 2 || after[1] != *slot || ![1,2].contains(&after[0]) || after[2..] != *data {
+                    return Err("Remap transaction readback mismatch".into());
+                }
+            }
+            self.same_profile(active)?;
+            Ok(())
+        })();
+        Ok(match result {
+            Ok(()) => json!({"outcome":if attempted {"applied"} else {"unchanged"},"mutationAttempted":attempted,"verifiedRecords":records.len()}),
+            Err(error) => json!({"outcome":"uncertain","mutationAttempted":attempted,"error":error}),
+        })
+    }
     fn read_remaps(&mut self, request: Value) -> Result<Value, String> {
         crate::remap::validate_read(&request)?;
         let slot = request["wireIndex"].as_u64().unwrap() as u8;
@@ -639,6 +683,7 @@ impl Keyboard {
             }
             "--apply-snap" => self.apply_snap(edit.ok_or("Missing snap edit")?)?,
             "--apply-remap" => self.apply_remap(edit.ok_or("Missing remap edit")?)?,
+            "--apply-remaps" => self.apply_remaps(edit.ok_or("Missing remap transaction")?)?,
             "--remaps" => self.read_remaps(edit.ok_or("Missing remap read request")?)?,
             _ => return Err("Unsupported keyboard operation".into()),
         };

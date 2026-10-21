@@ -40,7 +40,8 @@ process.once('exit', () => host.stop());
 import { nativeReply, type Replies } from './native-replies.cjs';
 const run = async <O extends Operation>(mode: O, payload?: unknown): Promise<Replies[O]> => {
   const value = nativeReply(mode, await host.request(mode, payload));
-  if (mode.startsWith('--apply-') && mode !== '--apply-runtime-lighting') calibration = null;
+  if (mode === '--apply-actuation' || mode === '--apply-software-actuation' || mode === '--apply-snap' ||
+    (mode === '--apply-field' && payload && typeof payload === 'object' && 'field' in payload && payload.field === 'activeProfile')) calibration = null;
   return value;
 };
 const worker = { request: run };
@@ -107,6 +108,7 @@ export const stop = () => {
 };
 
 export const applyRemap = (request: C.RemapRequest) => run('--apply-remap', request);
+export const applyRemaps = (requests: C.RemapRequest[]) => run('--apply-remaps', requests);
 
 export const executable = verifiedExecutable;
 

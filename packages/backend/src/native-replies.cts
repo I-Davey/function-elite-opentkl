@@ -17,6 +17,7 @@ export interface Replies {
   '--apply-lighting': C.MutationResult<string>;
   '--apply-runtime-lighting': C.MutationResult;
   '--apply-remap': C.MutationResult<C.RemapRecord>;
+  '--apply-remaps': C.MutationResult;
   '--apply-snap': C.MutationResult<string>;
   '--apply-software-actuation': C.MutationResult;
 }

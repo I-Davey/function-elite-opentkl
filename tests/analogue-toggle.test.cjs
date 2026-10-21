@@ -40,6 +40,7 @@ test('desktop listener can enable output from off, disable every binding, then e
         assert.equal(record.data,request.expectedData);record.data=request.data;writes++;
         return {outcome:'applied'};
       },
+      async applyRemaps(requests) { for (const request of requests) await this.applyRemap(request); return {outcome:'applied'}; },
     }],
     ['../dist/backend/depth.cjs', { decode: value => value, estimate: value=>value*4, fullCoefficient:1 }],
     ['../dist/app/main/analogue-feedback.cjs', { createAnalogueFeedback: () => ({ stop: async () => {}, update: async () => {} }), restoreAnalogueLighting: async () => {} }],

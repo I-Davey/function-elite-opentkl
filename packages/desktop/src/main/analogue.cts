@@ -9,7 +9,7 @@ import * as devices from '../../../backend/src/devices.cjs';
 import * as depth from '../../../backend/src/depth.cjs';
 import * as remaps from '../../../backend/src/remaps.cjs';
 import { durable, replaceDurable } from '../../../backend/src/transaction-journal.cjs';
-import type { RemapRawInput, Connection } from '../../../backend/src/contracts.cjs';
+import type { RemapRawInput, RemapRequest, Connection } from '../../../backend/src/contracts.cjs';
 import { ProfileStore } from './profile-store.cjs';
 import { profileId as validId } from '../../../contracts/desktop-profiles.cjs';
 
@@ -41,13 +41,22 @@ export async function restoreAnalogueKeys(profile: string, keys?: number[]): Pro
   if (!saved) return;
   const connection = await devices.connection();
   if (connection.devicePath !== saved.devicePath) throw Error('Reconnect the keyboard used for analogue control to restore its keys');
-  for (const original of saved.records.filter(record => !keys || keys.includes(record.physicalKey))) {
-    const current = await devices.remaps({ wireIndex: original.wireIndex, physicalKeys: [original.physicalKey] });
-    const record = current.records.find((key) => key.physicalKey === original.physicalKey && key.level === original.level && key.fnLayer === original.fnLayer);
-    if (!record) throw Error('Saved analogue key is unavailable');
-    if (record.data === original.data) continue;
-    if (record.data !== quiet) throw Error('Key ' + original.physicalKey + ' changed outside analogue control; its original mapping remains saved');
-    succeeded(await devices.applyRemap({ ...original, expectedActive: current.activeProfileIndex, expectedData: quiet }));
+  const selected = saved.records.filter(record => !keys || keys.includes(record.physicalKey));
+  for (const wireIndex of new Set(selected.map(record => record.wireIndex))) {
+    const physicalKeys = [...new Set(selected.filter(record => record.wireIndex === wireIndex).map(record => record.physicalKey))];
+    for (let offset = 0; offset < physicalKeys.length; offset += 4) {
+      const batch = physicalKeys.slice(offset, offset + 4);
+      const current = await devices.remaps({ wireIndex, physicalKeys: batch });
+      const changes: RemapRequest[] = [];
+      for (const original of selected.filter(record => record.wireIndex === wireIndex && batch.includes(record.physicalKey))) {
+        const record = current.records.find(key => key.physicalKey === original.physicalKey && key.level === original.level && key.fnLayer === original.fnLayer);
+        if (!record) throw Error('Saved analogue key is unavailable');
+        if (record.data === original.data) continue;
+        if (record.data !== quiet) throw Error('Key ' + original.physicalKey + ' changed outside analogue control; its original mapping remains saved');
+        changes.push({ ...original, expectedActive: current.activeProfileIndex, expectedData: quiet });
+      }
+      if (changes.length) succeeded(await devices.applyRemaps(changes));
+    }
   }
   const remaining = keys ? saved.records.filter(record => !keys.includes(record.physicalKey)) : [];
   if (remaining.length) replaceDurable(journalFile(profile), { ...saved, records: remaining });
@@ -128,7 +137,16 @@ export function createAnalogue(profile: string, serial: Serial) {
     saved.records.push(...pending);
     if (previous) replaceDurable(journalFile(profile), saved);
     else durable(journalFile(profile), saved);
-    for (const record of pending) succeeded(await devices.applyRemap({ ...record, data: quiet, expectedData: record.data, expectedActive: connection.activeProfileIndex }));
+    for (let offset = 0; offset < pending.length; offset += 16) succeeded(await devices.applyRemaps(pending.slice(offset, offset + 16)
+      .map(record => ({ ...record, data: quiet, expectedData: record.data, expectedActive: connection.activeProfileIndex }))));
+  }
+  async function paint(overridden: number[], now: number, pending: number[] = []) {
+    if (feedbackFailed) return;
+    try { await feedback.update(settings, overridden, now, pending); feedbackError = ''; }
+    catch (caught) {
+      feedbackError = errorMessage(caught); feedbackFailed = true;
+      try { await feedback.stop(); } catch (recovery) { feedbackError += ' · ' + errorMessage(recovery); }
+    }
   }
   async function tick(ticket: number) {
     if ((!running && !calibration) || ticket !== generation) return;
@@ -164,25 +182,20 @@ export function createAnalogue(profile: string, serial: Serial) {
           frame = engine.update(rawMm, effective, elapsed);
           const result = output!.update([...Object.values(frame.axes), frame.buttonMask].join(','));
           if (result !== 'updated') throw Error(result);
+          // Publish fresh input before any verified mapping or lighting transaction waits.
+          lastTick = lastSample = now;
           if (transitioning && [...restore, ...add].every(key => rawMm[key] <= settings.bindings[key].startMm)) {
             // Keep the controller attached to the game; release every control during mapping writes.
             if (restore.length || add.length) {
               const neutral = output!.update('0,0,0,0,0,0,0');
               if (neutral !== 'updated') throw Error(neutral);
+              await paint(targets, Date.now(), [...blocked]);
               if (restore.length) await restoreAnalogueKeys(profile, restore);
               if (add.length) await suppress(targets, add);
             }
             overriddenKeys = targets; transitioning = false; engine.reset();
           }
-          if (!feedbackFailed) {
-            try {
-              await feedback.update(settings, overriddenKeys, now, transitioning ? [...blocked] : []); feedbackError = '';
-            }
-            catch (caught) {
-              feedbackError = errorMessage(caught); feedbackFailed = true;
-              try { await feedback.stop(); } catch (recovery) { feedbackError += ' · ' + errorMessage(recovery); }
-            }
-          }
+          await paint(overriddenKeys, Date.now(), transitioning ? [...blocked] : []);
         }
         lastTick = lastSample = now;
       });

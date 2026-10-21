@@ -103,10 +103,35 @@ pub fn validate_edit(request: &Value) -> Result<(), String> {
     Ok(())
 }
 
+pub fn validate_batch(request: &Value) -> Result<(), String> {
+    let records = request.as_array().filter(|r| !r.is_empty() && r.len() <= 16)
+        .ok_or("Remap transaction requires 1–16 records")?;
+    let mut seen = std::collections::HashSet::new();
+    for record in records {
+        validate_edit(record)?;
+        if record["wireIndex"] != records[0]["wireIndex"] || record["expectedActive"] != records[0]["expectedActive"] {
+            return Err("Remap transaction must use one profile".into());
+        }
+        let key = (record["physicalKey"].as_u64().unwrap(), record["level"].as_u64().unwrap(), record["fnLayer"].as_bool().unwrap());
+        if !seen.insert(key) { return Err("Duplicate remap transaction record".into()); }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn batch_remaps_are_bounded_unique_and_profile_scoped() {
+        let first = json!({"wireIndex":4,"expectedActive":4,"physicalKey":26,"level":0,"fnLayer":false,"expectedData":"","data":"01010000000000"});
+        assert!(validate_batch(&json!([first])).is_ok());
+        assert!(validate_batch(&json!([])).is_err());
+        assert!(validate_batch(&json!(vec![first.clone();17])).is_err());
+        assert!(validate_batch(&json!([first,first])).is_err());
+        let mut other = first.clone(); other["wireIndex"] = json!(0); other["level"] = json!(1);
+        assert!(validate_batch(&json!([first,other])).is_err());
+    }
     #[test]
     fn physical_modifiers_use_sensor_wire_ids() {
         assert_eq!(canonical(228).unwrap(), 92);
