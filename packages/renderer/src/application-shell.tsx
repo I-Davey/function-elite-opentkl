@@ -75,6 +75,12 @@ export const ApplicationShell = observer(function ApplicationShell({
     return () => clearTimeout(timer);
   }, [notice]);
   useEffect(() => { content.current?.scrollTo(0, 0); }, [pathname, ui.depth, ui.tools, ui.deviceState, ui.analogue]);
+  useEffect(() => context.host.onNavigate((page) => {
+    ui.tools = page === 'profiles';
+    ui.analogue = page === 'analogue';
+    ui.depth = false;
+    ui.deviceState = false;
+  }), [context.host, ui]);
   const current = pages.find((page) => page.path === pathname ||
     (page.id === 'macros' && pathname.startsWith(keyboardRoutes.keyboardMacros))) ?? pages[0];
   const active = ui.tools || ui.deviceState ? 'tools' : ui.depth ? 'sensors' : ui.analogue ? 'analogue' : current.id;

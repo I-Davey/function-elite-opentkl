@@ -8,6 +8,7 @@ import type {
 
 /** Public desktop API: every invocation has a named request and response. */
 export interface KeyboardHost {
+  onNavigate(callback: (page: 'profiles' | 'analogue') => void): () => void;
   analogueState(): Promise<import('./desktop-analogue.cjs').AnalogueState>;
   analogueProfile(id: string): Promise<import('./desktop-analogue.cjs').AnalogueState>;
   analogueSave(settings: import('./desktop-analogue.cjs').AnalogueProfile, profileId?: string): Promise<import('./desktop-analogue.cjs').AnalogueState>;

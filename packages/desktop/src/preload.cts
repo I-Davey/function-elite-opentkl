@@ -11,6 +11,13 @@ const {
 const invoke = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
 const host: KeyboardHost = {
+  onNavigate: (callback) => {
+    const listener = (_event: IpcEvent, value: unknown) => {
+      if (value === 'profiles' || value === 'analogue') callback(value);
+    };
+    ipcRenderer.on('keyboard:navigate', listener);
+    return () => ipcRenderer.removeListener('keyboard:navigate', listener);
+  },
   analogueState: () => invoke('keyboard:analogue-state'),
   analogueProfile: (id) => invoke('keyboard:analogue-profile', id),
   analogueSave: (settings, profileId) => invoke('keyboard:analogue-save', profileId ? { settings, profileId } : settings),

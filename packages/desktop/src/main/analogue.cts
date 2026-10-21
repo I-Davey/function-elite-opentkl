@@ -254,7 +254,19 @@ export function createAnalogue(profile: string, serial: Serial) {
     }
     return state();
   };
+  const enable = (value: boolean) => serial(async () => {
+    if (typeof value !== 'boolean') throw Error('Expected analogue enabled flag');
+    outputWanted = value;
+    try {
+      if (running) { shortcut.active = !value; engine.reset(); output!.update('0,0,0,0,0,0,0'); frame = neutralFrame(); }
+      else if (value || settings.override.enabled) await startInside(!value);
+      else { await stopInside(); error = ''; }
+    }
+    catch (caught) { error = errorMessage(caught); silence(); throw caught; }
+    return state();
+  });
   return {
+    enable,
     reloadProfiles: async () => {
       await stopInside(false);
       const next:Record<string,AnalogueProfile>={};
@@ -341,17 +353,10 @@ export function createAnalogue(profile: string, serial: Serial) {
         }
         return state();
       }));
-      handle('keyboard:analogue-enable', (_event, value) => serial(async () => {
+      handle('keyboard:analogue-enable', (_event, value) => {
         if (typeof value !== 'boolean') throw Error('Expected analogue enabled flag');
-        outputWanted = value;
-        try {
-          if (running) { shortcut.active = !value; engine.reset(); output!.update('0,0,0,0,0,0,0'); frame = neutralFrame(); }
-          else if (value || settings.override.enabled) await startInside(!value);
-          else { await stopInside(); error = ''; }
-        }
-        catch (caught) { error = errorMessage(caught); silence(); throw caught; }
-        return state();
-      }));
+        return enable(value);
+      });
       handle('keyboard:analogue-import', () => serial(async () => {
         const { dialog }: Pick<Electron, 'dialog'> = require('electron');
         const chosen = await dialog.showOpenDialog(win, { title: 'Import CAM analogue mappings', properties: ['openFile'], filters: [{ name: 'Analogue settings', extensions: ['json'] }] });

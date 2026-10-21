@@ -23,7 +23,8 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 LicenseFile={#PackageRoot}\LICENSE
-UninstallDisplayIcon={app}\runtime\Function Elite OpenTKL.exe
+SetupIconFile={#PackageRoot}\resources\icons\app.ico
+UninstallDisplayIcon={app}\resources\icons\app.ico
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
@@ -37,8 +38,11 @@ Source: "{#PackageRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Source: "{#DriverInstaller}"; DestName: "ViGEmBus-Setup.exe"; Flags: dontcopy
 
 [Icons]
-Name: "{group}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"
-Name: "{autodesktop}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; Tasks: desktopicon
+Name: "{group}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\app.ico"
+Name: "{autodesktop}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\app.ico"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Function Elite OpenTKL"; Flags: dontcreatekey uninsdeletevalue
 
 [Run]
 Filename: "{app}\runtime\Function Elite OpenTKL.exe"; Description: "Open Function Elite OpenTKL"; Flags: nowait postinstall skipifsilent runasoriginaluser; Check: CanLaunch

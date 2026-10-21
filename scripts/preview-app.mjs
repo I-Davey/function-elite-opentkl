@@ -32,6 +32,7 @@ window.keyboardHost = {
   saveProfileLibrary: async value=>{library=value;return library;},
   applications: async()=>({foreground:null,running:[]}),
   onApplications: ()=>noop,
+  onNavigate: ()=>noop,
   browseApplication: unavailable,
   importProfileDocument: async value=>{profiles=value;return true;},
   prepareSoftwareProfile: async()=>{},

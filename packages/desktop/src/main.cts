@@ -10,6 +10,7 @@ import * as macroRecorderModule from './main/macro-recorder.cjs';
 import * as keyboardIpcModule from './main/keyboard-ipc.cjs';
 import { createAnalogue } from './main/analogue.cjs';
 import { watchApplications } from './main/applications.cjs';
+import { createTray } from './main/tray.cjs';
 ('use strict');
 // Owned host with an independent allowlisted HID backend; no original CAM addon/helper.
 const {
@@ -17,12 +18,15 @@ const {
   BrowserWindow,
   ipcMain,
   session,
-}: Pick<Electron, 'app' | 'BrowserWindow' | 'ipcMain' | 'session'> = require('electron');
+  Tray,
+  Menu,
+}: Pick<Electron, 'app' | 'BrowserWindow' | 'ipcMain' | 'session' | 'Tray' | 'Menu'> = require('electron');
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const testing = process.argv.includes('--keyboard-test');
-const { profile } = appDataModule.configure(app, testing);
+const { profile, dataRoot } = appDataModule.configure(app, testing);
+const hidden = process.argv.includes('--hidden');
 app.setName('Function Elite OpenTKL');
 app.setAppUserModelId('FunctionElite.OpenTKL');
 if (!app.requestSingleInstanceLock()) {
@@ -51,13 +55,14 @@ app
       beforeShutdown: () => analogue?.stopInside(),
     });
     const win = new BrowserWindow({
-      show: !testing,
+      show: !testing && !hidden,
       width: 1440,
       height: 960,
       minWidth: 1100,
       minHeight: 740,
       backgroundColor: '#131316',
       title: 'Function Elite OpenTKL',
+      icon: path.join(__dirname, '../resources/icons/app.png'),
       titleBarStyle: 'hidden',
       titleBarOverlay: { color: '#111114', symbolColor: '#b9b7c5', height: 40 },
       webPreferences: {
@@ -71,6 +76,7 @@ app
     win.removeMenu();
     analogue = createAnalogue(profile, serial);
     analogue.register(ipcMain, win);
+    if (!testing) createTray({ app, Tray, Menu }, win, analogue, dataRoot, record);
     app.on('second-instance', () => {
       if (win.isMinimized()) win.restore();
       win.show();
@@ -183,7 +189,7 @@ app
           record('capture-error', errorMessage(error));
         }
       }, 12000);
-    if (!testing) win.show();
+    if (!testing && !hidden) win.show();
     win.on('closed', () => clearTimeout(deadline));
   })
   .catch((error) => {

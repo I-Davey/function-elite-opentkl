@@ -7,6 +7,8 @@ export interface App {
   setPath(name: 'userData' | 'sessionData' | 'logs' | 'crashDumps', value: string): void;
   setName(name: string): void;
   setAppUserModelId(id: string): void;
+  getLoginItemSettings(options: { path: string; args: string[] }): { openAtLogin: boolean };
+  setLoginItemSettings(options: { openAtLogin: boolean; path: string; args: string[]; name: string }): void;
   requestSingleInstanceLock(): boolean;
   quit(): void;
   whenReady(): Promise<void>;
@@ -50,11 +52,14 @@ export interface Window {
   isDestroyed(): boolean;
   restore(): void;
   show(): void;
+  hide(): void;
   focus(): void;
   close(): void;
   removeMenu(): void;
   loadFile(file: string, options: { query: Record<string, string> }): Promise<void>;
   on(event: 'closed', listener: () => void): void;
+  on(event: 'close', listener: (event: CancelableEvent) => void): void;
+  on(event: 'session-end', listener: () => void): void;
 }
 interface WindowOptions {
   show: boolean;
@@ -64,6 +69,7 @@ interface WindowOptions {
   minHeight?: number;
   backgroundColor: string;
   title: string;
+  icon?: string;
   titleBarStyle?: 'hidden';
   titleBarOverlay?: { color: string; symbolColor: string; height: number };
   webPreferences: {
@@ -105,6 +111,22 @@ export interface Electron {
   dialog: Dialog;
   contextBridge: { exposeInMainWorld(name: string, api: object): void };
   ipcRenderer: IpcRenderer;
+  Tray: new (icon: string) => Tray;
+  Menu: { buildFromTemplate(items: MenuItem[]): Menu };
+}
+export interface MenuItem {
+  label?: string;
+  type?: 'separator' | 'checkbox';
+  checked?: boolean;
+  enabled?: boolean;
+  click?: () => void;
+}
+export interface Menu { readonly items: readonly MenuItem[] }
+export interface Tray {
+  setToolTip(text: string): void;
+  popUpContextMenu(menu: Menu): void;
+  on(event: 'click' | 'double-click' | 'right-click', listener: () => void): void;
+  destroy(): void;
 }
 export type Serial = <T>(operation: () => T | PromiseLike<T>) => Promise<T>;
 export type RecordEvent = (kind: string, detail: unknown) => void;

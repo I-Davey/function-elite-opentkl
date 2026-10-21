@@ -12,6 +12,8 @@ Exit CAM from its tray menu before opening OpenTKL: both apps require the same k
 
 Initial beta installers are unsigned. The bundled official driver installer is unchanged and checksum verified. A portable ZIP is also built; analogue output still requires ViGEmBus.
 
+Closing the window keeps OpenTKL in the system tray. Right-click its keyboard icon to open Profiles, toggle controller output, choose **Start with Windows**, or **Quit**. Startup opens quietly in the tray; controller output still starts off. Quit restores temporary key mappings and lighting before exiting.
+
 ## Build and run
 
 Requires Windows, Microsoft C++ build tools, Rust and Node.js 24.16.0+. The first build downloads npm/Cargo dependencies using the committed lockfiles.
