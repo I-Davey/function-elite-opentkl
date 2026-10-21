@@ -12,7 +12,7 @@ Exit CAM from its tray menu before opening OpenTKL: both apps require the same k
 
 Initial beta installers are unsigned. The bundled official driver installer is unchanged and checksum verified. A portable ZIP is also built; analogue output still requires ViGEmBus.
 
-Closing the window keeps OpenTKL in the system tray. Right-click its keyboard icon to open Profiles, toggle controller output, choose **Start with Windows**, or **Quit**. Startup opens quietly in the tray; controller output still starts off. Quit restores temporary key mappings and lighting before exiting.
+Closing the window keeps OpenTKL in the system tray. Setup offers an optional **Start with Windows** checkbox; you can also change it by right-clicking the tray icon. The menu opens Profiles, toggles controller output and provides **Quit**. Startup opens quietly in the tray; controller output still starts off. Quit restores temporary key mappings and lighting before exiting.
 
 ## Build and run
 

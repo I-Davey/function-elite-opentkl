@@ -32,6 +32,7 @@ SetupLogging=yes
 [Tasks]
 Name: controller; Description: "Enable analogue controls (install ViGEmBus controller driver)"; Check: NeedsControllerDriver
 Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
+Name: startup; Description: "Start with Windows"; Flags: unchecked
 
 [Files]
 Source: "{#PackageRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -43,6 +44,8 @@ Name: "{autodesktop}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function 
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Function Elite OpenTKL"; Flags: dontcreatekey uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Function Elite OpenTKL"; ValueData: """{app}\runtime\Function Elite OpenTKL.exe"" --hidden"; Tasks: startup; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueName: "Function Elite OpenTKL"; Tasks: startup; Flags: deletevalue
 
 [Run]
 Filename: "{app}\runtime\Function Elite OpenTKL.exe"; Description: "Open Function Elite OpenTKL"; Flags: nowait postinstall skipifsilent runasoriginaluser; Check: CanLaunch

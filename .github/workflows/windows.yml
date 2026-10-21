@@ -55,11 +55,15 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $setup = (Get-ChildItem dist/installers/*-Setup.exe).FullName
           $target = Join-Path $env:RUNNER_TEMP 'OpenTKL-install-check'
-          $install = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/TASKS="!controller,!desktopicon"',('/DIR="' + $target + '"')) -WindowStyle Hidden -PassThru -Wait
+          $install = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/TASKS="startup,!controller,!desktopicon"',('/DIR="' + $target + '"')) -WindowStyle Hidden -PassThru -Wait
           if ($install.ExitCode -ne 0) { throw "Setup failed: $($install.ExitCode)" }
           if (!(Test-Path -LiteralPath (Join-Path $target 'runtime/Function Elite OpenTKL.exe'))) { throw 'Installed application is missing' }
+          $startupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $startupValue = Get-ItemPropertyValue -LiteralPath $startupKey -Name 'Function Elite OpenTKL'
+          if ($startupValue -ne ('"' + (Join-Path $target 'runtime\Function Elite OpenTKL.exe') + '" --hidden')) { throw 'Windows startup command is incorrect' }
           $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait
           if ($uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($uninstall.ExitCode)" }
+          if (Get-ItemProperty -LiteralPath $startupKey -Name 'Function Elite OpenTKL' -ErrorAction SilentlyContinue) { throw 'Uninstall left its Windows startup entry behind' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Function-Elite-OpenTKL-windows-x64
