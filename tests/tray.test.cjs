@@ -8,7 +8,8 @@ test('tray keeps the window alive, routes pages and pauses output through the sh
   let menu, hidden = 0, shown = 0, quits = 0, startup, enabled = true;
   const navigation = [];
   Object.assign(app, { quit: () => { quits++; app.emit('before-quit'); },
-    getLoginItemSettings: () => ({ openAtLogin: startup?.openAtLogin ?? false }),
+    getLoginItemSettings: () => ({ openAtLogin: false,
+      launchItems: startup?.openAtLogin ? [{ name: startup.name, enabled: true }] : [] }),
     setLoginItemSettings: value => { startup = value; },
   });
   Object.assign(win, { isMinimized: () => false, show: () => { shown++; }, focus: () => {},
@@ -41,7 +42,14 @@ test('tray keeps the window alive, routes pages and pauses output through the sh
   menu.find(item => item.label === 'Start with Windows').click();
   assert.equal(startup.openAtLogin, true);
   assert.ok(startup.args.includes('--hidden'));
-  assert.ok(startup.args.includes('--data-dir=E:\\fixture-data'));
+  assert.ok(startup.args.includes('"--data-dir=E:\\fixture-data"'));
+  assert.ok(startup.path.startsWith('"') && startup.path.endsWith('"'));
+  tray.emit('right-click');
+  assert.equal(menu.find(item => item.label === 'Start with Windows').checked, true);
+  menu.find(item => item.label === 'Start with Windows').click();
+  assert.equal(startup.openAtLogin, false);
+  tray.emit('right-click');
+  assert.equal(menu.find(item => item.label === 'Start with Windows').checked, false);
   menu.find(item => item.label === 'Quit').click();
   assert.equal(quits, 1);
   win.emit('close', { preventDefault: () => assert.fail('Quit must allow the window to close') });

@@ -12,13 +12,16 @@ export function createTray(
   record: RecordEvent,
 ) {
   const tray = new Tray(path.join(__dirname, '../../resources/icons/app.ico'));
+  const startupName = 'Function Elite OpenTKL';
   const startup = {
-    path: process.execPath,
+    path: '"' + process.execPath + '"',
     args: [
-      ...(path.basename(process.execPath).toLowerCase() === 'electron.exe' ? [path.resolve(__dirname, '..')] : []),
-      '--hidden', '--data-dir=' + dataRoot,
+      ...(path.basename(process.execPath).toLowerCase() === 'electron.exe' ? ['"' + path.resolve(__dirname, '..') + '"'] : []),
+      '--hidden', '"--data-dir=' + dataRoot + '"',
     ],
   };
+  // Electron's openAtLogin reads the AppUserModelID entry, ignoring a custom name.
+  const startsWithWindows = () => app.getLoginItemSettings(startup).launchItems.some(item => item.name === startupName && item.enabled);
   let quitting = false;
   const open = () => {
     if (win.isMinimized()) win.restore();
@@ -47,11 +50,11 @@ export function createTray(
       },
       { label: 'Analogue controls…', click: () => navigate('analogue') },
       { type: 'separator' },
-      { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(startup).openAtLogin,
+      { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(),
         click: () => {
           try {
-            app.setLoginItemSettings({ ...startup, name: 'Function Elite OpenTKL',
-              openAtLogin: !app.getLoginItemSettings(startup).openAtLogin });
+            app.setLoginItemSettings({ ...startup, name: startupName,
+              openAtLogin: !startsWithWindows() });
           } catch (error) { record('startup-error', errorMessage(error)); open(); }
         },
       },

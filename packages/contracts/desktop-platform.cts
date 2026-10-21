@@ -7,7 +7,10 @@ export interface App {
   setPath(name: 'userData' | 'sessionData' | 'logs' | 'crashDumps', value: string): void;
   setName(name: string): void;
   setAppUserModelId(id: string): void;
-  getLoginItemSettings(options: { path: string; args: string[] }): { openAtLogin: boolean };
+  getLoginItemSettings(options: { path: string; args: string[] }): {
+    openAtLogin: boolean;
+    launchItems: { name: string; enabled: boolean }[];
+  };
   setLoginItemSettings(options: { openAtLogin: boolean; path: string; args: string[]; name: string }): void;
   requestSingleInstanceLock(): boolean;
   quit(): void;
