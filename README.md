@@ -2,7 +2,7 @@
 
 A community Windows app for the NZXT Function Elite MiniTKL ANSI HE keyboard (firmware 2.2.14): lighting, actuation, rapid trigger, remapping, profiles, macros, analogue controller output and sensor monitoring. Uses stock firmware and Windows HID. Independent of NZXT.
 
-**Beta:** currently supports this keyboard/firmware combination. Firmware flashing and other CAM devices are outside this app's scope. Source contributions use GPLv3; dependency licences and attribution are retained in [NOTICE](NOTICE).
+**Beta:** currently supports this keyboard/firmware combination. Firmware flashing and other CAM devices are outside this app's scope; dependency licences and attribution are retained in [NOTICE](NOTICE).
 
 ## Install
 
