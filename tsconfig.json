@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "composite": true,
+    "tsBuildInfoFile": ".build/device-client.tsbuildinfo",
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "rootDir": "packages/device-client/src",
+    "outDir": "dist/backend",
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": [
+    "packages/device-client/src/**/*.cts"
+  ]
+}

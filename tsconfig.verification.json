@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.renderer.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true
+  },
+  "include": ["packages/renderer/checks/**/*.ts"]
+}

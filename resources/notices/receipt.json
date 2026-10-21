@@ -1,0 +1,13 @@
+{
+  "files": [
+    {
+      "package": "react-select",
+      "version": "5.7.7",
+      "path": "resources/notices/react-select-5.7.7/LICENSE",
+      "source": "https://raw.githubusercontent.com/JedWatson/react-select/b53e64754493479cd5506879392d4e3e726025c5/LICENSE",
+      "commit": "b53e64754493479cd5506879392d4e3e726025c5",
+      "bytes": 1077,
+      "sha256": "d736dd18c7e53f88217fa2106c748f1a1687bb91d69a1f673fa685269402d784"
+    }
+  ]
+}

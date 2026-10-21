@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": "packages/application-state/src",
+    "outDir": ".build/application-state",
+    "declaration": true,
+    "sourceMap": true
+  },
+  "include": ["packages/application-state/src/**/*.ts"]
+}

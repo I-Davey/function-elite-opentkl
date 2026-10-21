@@ -1,0 +1,71 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const devices = require('../dist/backend/devices.cjs');
+const lighting = require('../dist/backend/lighting.cjs');
+const {physicalToWire}=require('../dist/backend/remaps.cjs');
+const { durable, replaceDurable } = require('../dist/backend/transaction-journal.cjs');
+const { createAnalogueFeedback } = require('../dist/app/main/analogue-feedback.cjs');
+const { parseProfile, binding } = require('../dist/app/main/desktop-analogue.cjs');
+function folder(t) {
+  const parent = path.resolve(__dirname, '../.build/analogue-recovery');
+  fs.mkdirSync(parent, { recursive: true });
+  const profile = fs.mkdtempSync(path.join(parent, 'case-'));
+  t.after(() => { assert.ok(profile.startsWith(parent + path.sep)); fs.rmSync(profile, {recursive:true, force:true}); });
+  return profile;
+}
+test('mutable journals replace atomically while original backups remain exclusive', t => {
+  const profile = folder(t), file = path.join(profile, 'session.json');
+  durable(file, { original: 1 });
+  assert.throws(() => durable(file, {}), /EEXIST/);
+  replaceDurable(file, { original: 1, applied: 2 });
+  const cyclic = {}; cyclic.self = cyclic;
+  assert.throws(() => replaceDurable(file, cyclic), /circular/i);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {original:1, applied:2});
+  assert.deepEqual(fs.readdirSync(profile), ['session.json']);
+});
+test('feedback updates its existing journal and restores original reactive lighting', async t => {
+  const profile = folder(t), file = path.join(profile, 'analogue-lighting-session.json');
+  const base = lighting.encodeZones([{ keys:[26,22], effectSettings:{kind:'Color',color:{r:20,g:30,b:40}} }], 'Base');
+  const original = lighting.encodeZones([{keys:[26,22],effectSettings:{kind:'Fade',speedPercent:.5,keyEvent:'Pressed',color:{kind:'Rainbow'}}}], 'Reactive');
+  let reactive = original, storedWrites = 0, liveWrites = 0;
+  const frames=[];
+  const colorFor=key=>frames.at(-1).find(r=>r.wireKeys.includes(physicalToWire.get(key))).attributes.color;
+  t.mock.method(devices, 'connection', async () => ({devicePath:'fixture',activeProfileIndex:0}));
+  t.mock.method(devices, 'lighting', async () => ({activeProfileIndex:0,profiles:[{wireIndex:0,layers:[{kind:'Base',data:base},{kind:'Reactive',data:reactive}]}]}));
+  t.mock.method(devices, 'applyLighting', async request => {
+    assert.equal(request.layer, 'Reactive');
+    assert.equal(request.expectedData, reactive);
+    const saved = JSON.parse(fs.readFileSync(file,'utf8'));
+    assert.equal(saved.reactive, original, 'Preserve original effects through every journal update');
+    if (request.data !== original) assert.equal(saved.reactiveApplied, request.data);
+    reactive = request.data; storedWrites++;
+    return {outcome:'applied'};
+  });
+  t.mock.method(devices, 'applyRuntimeLighting', async request => {
+    assert.equal(request.layer,'Base'); frames.push(lighting.records(request.data,'Base')); liveWrites++; return {outcome:'acknowledged'};
+  });
+  const feedback = createAnalogueFeedback(profile);
+  const settings = parseProfile({schemaVersion:2,bindings:{26:binding({enabled:true})},feedback:{enabled:true,brightness:1,fadeMs:0,activeColor:'#123456',suppressedColor:'#abcdef',overrideColor:'#fedcba'}});
+  await feedback.update(settings, [], 1000);
+  assert.deepEqual(colorFor(26),[0x12,0x34,0x56],'Released controller+normal key uses the full chosen colour');
+  await feedback.update(settings, [], 1200);
+  settings.bindings[22] = binding({enabled:true,overwriteDefault:true});
+  await feedback.update(settings, [], 1400);
+  assert.deepEqual(colorFor(22),[0xab,0xcd,0xef],'Controller-only mode uses the full chosen colour');
+  assert.equal(storedWrites,2);
+  assert.ok(liveWrites >= 2);
+  settings.feedback.brightness=.5;
+  await feedback.update(settings,[],1600);
+  assert.deepEqual(colorFor(26),[9,26,43]);assert.deepEqual(colorFor(22),[86,103,120],'Both controller-on modes use exactly half brightness');
+  settings.feedback.fadeMs=200;settings.feedback.activeColor='#ffffff';
+  await feedback.update(settings,[],1700);
+  assert.ok(colorFor(26)[0]>9&&colorFor(26)[0]<128,'Fade smooths changes towards the chosen brightness');
+  await feedback.update(settings,[26,22],1800);
+  assert.deepEqual(colorFor(26),[127,110,93],'Controller-off mode uses the same brightness scale');
+  await feedback.stop();
+  assert.equal(reactive,original);
+  assert.equal(storedWrites,3);
+  assert.equal(fs.existsSync(file),false);
+});

@@ -1,0 +1,19 @@
+Function Elite OpenTKL
+Copyright (C) 2026 Function Elite OpenTKL contributors
+
+Project contributions are licensed under GNU GPL version 3 only; see LICENSE.
+Separately licensed dependencies retain their own copyright and licence terms.
+
+This community project reconstructs the NZXT CAM keyboard UI and the normal
+Function Elite HE protocol. NZXT and its device names identify supported hardware;
+they are trademarks of their respective owners. This project is not affiliated
+with, endorsed by, or supported by NZXT. No trademark rights are granted.
+
+ViGEmClient is distributed unchanged under its MIT licence in
+resources/controller/LICENSE. The optional installer bundles the unmodified
+official ViGEmBus 1.22.0 installer, with its upstream BSD licence in
+resources/controller/ViGEmBus-LICENSE. ViGEmBus is a shared third-party driver and is not removed
+when this application is uninstalled.
+
+Application packages include npm, Rust and Electron dependency notices and a
+DEPENDENCIES.json inventory. Those notices are part of the distribution.

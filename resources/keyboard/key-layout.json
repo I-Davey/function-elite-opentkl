@@ -1,0 +1,922 @@
+{
+  "model": "Function Elite MiniTKL ANSI",
+  "rows": [
+    [
+      {
+        "code": 41,
+        "label": "Esc",
+        "sensorId": 0
+      },
+      {
+        "code": 58,
+        "label": "F1",
+        "sensorId": 1
+      },
+      {
+        "code": 59,
+        "label": "F2",
+        "sensorId": 2
+      },
+      {
+        "code": 60,
+        "label": "F3",
+        "sensorId": 3
+      },
+      {
+        "code": 61,
+        "label": "F4",
+        "sensorId": 4
+      },
+      {
+        "code": 62,
+        "label": "F5",
+        "sensorId": 5
+      },
+      {
+        "code": 63,
+        "label": "F6",
+        "sensorId": 6
+      },
+      {
+        "code": 64,
+        "label": "F7",
+        "sensorId": 7
+      },
+      {
+        "code": 65,
+        "label": "F8",
+        "sensorId": 8
+      },
+      {
+        "code": 66,
+        "label": "F9",
+        "sensorId": 9
+      },
+      {
+        "code": 67,
+        "label": "F10",
+        "sensorId": 10
+      },
+      {
+        "code": 68,
+        "label": "F11",
+        "sensorId": 11
+      },
+      {
+        "code": 69,
+        "label": "F12",
+        "sensorId": 12
+      },
+      {
+        "code": 104,
+        "label": "F13",
+        "sensorId": 15
+      },
+      {
+        "code": 70,
+        "label": "Prt Sc",
+        "sensorId": 13
+      },
+      {
+        "code": 71,
+        "label": "Scr Lk",
+        "sensorId": 14
+      },
+      {
+        "code": 72,
+        "label": "Pause",
+        "sensorId": 115
+      }
+    ],
+    [
+      {
+        "code": 53,
+        "label": "`",
+        "sensorId": 16
+      },
+      {
+        "code": 30,
+        "label": "1",
+        "sensorId": 17
+      },
+      {
+        "code": 31,
+        "label": "2",
+        "sensorId": 18
+      },
+      {
+        "code": 32,
+        "label": "3",
+        "sensorId": 19
+      },
+      {
+        "code": 33,
+        "label": "4",
+        "sensorId": 20
+      },
+      {
+        "code": 34,
+        "label": "5",
+        "sensorId": 21
+      },
+      {
+        "code": 35,
+        "label": "6",
+        "sensorId": 22
+      },
+      {
+        "code": 36,
+        "label": "7",
+        "sensorId": 23
+      },
+      {
+        "code": 37,
+        "label": "8",
+        "sensorId": 24
+      },
+      {
+        "code": 38,
+        "label": "9",
+        "sensorId": 25
+      },
+      {
+        "code": 39,
+        "label": "0",
+        "sensorId": 26
+      },
+      {
+        "code": 45,
+        "label": "−",
+        "sensorId": 27
+      },
+      {
+        "code": 46,
+        "label": "=",
+        "sensorId": 28
+      },
+      {
+        "width": 2,
+        "code": 42,
+        "label": "Backspace",
+        "sensorId": 30
+      },
+      {
+        "code": 73,
+        "label": "Ins",
+        "sensorId": 46
+      },
+      {
+        "code": 74,
+        "label": "Home",
+        "sensorId": 126
+      }
+    ],
+    [
+      {
+        "width": 1.5,
+        "code": 43,
+        "label": "Tab",
+        "sensorId": 32
+      },
+      {
+        "code": 20,
+        "label": "Q",
+        "sensorId": 33
+      },
+      {
+        "code": 26,
+        "label": "W",
+        "sensorId": 34
+      },
+      {
+        "code": 8,
+        "label": "E",
+        "sensorId": 35
+      },
+      {
+        "code": 21,
+        "label": "R",
+        "sensorId": 36
+      },
+      {
+        "code": 23,
+        "label": "T",
+        "sensorId": 37
+      },
+      {
+        "code": 28,
+        "label": "Y",
+        "sensorId": 38
+      },
+      {
+        "code": 24,
+        "label": "U",
+        "sensorId": 39
+      },
+      {
+        "code": 12,
+        "label": "I",
+        "sensorId": 40
+      },
+      {
+        "code": 18,
+        "label": "O",
+        "sensorId": 41
+      },
+      {
+        "code": 19,
+        "label": "P",
+        "sensorId": 42
+      },
+      {
+        "code": 47,
+        "label": "[",
+        "sensorId": 43
+      },
+      {
+        "code": 48,
+        "label": "]",
+        "sensorId": 44
+      },
+      {
+        "width": 1.5,
+        "code": 49,
+        "label": "\\",
+        "sensorId": 45
+      },
+      {
+        "code": 76,
+        "label": "Del",
+        "sensorId": 62
+      },
+      {
+        "code": 77,
+        "label": "End",
+        "sensorId": 104
+      }
+    ],
+    [
+      {
+        "width": 1.75,
+        "code": 57,
+        "label": "Caps",
+        "sensorId": 48
+      },
+      {
+        "code": 4,
+        "label": "A",
+        "sensorId": 49
+      },
+      {
+        "code": 22,
+        "label": "S",
+        "sensorId": 50
+      },
+      {
+        "code": 7,
+        "label": "D",
+        "sensorId": 51
+      },
+      {
+        "code": 9,
+        "label": "F",
+        "sensorId": 52
+      },
+      {
+        "code": 10,
+        "label": "G",
+        "sensorId": 53
+      },
+      {
+        "code": 11,
+        "label": "H",
+        "sensorId": 54
+      },
+      {
+        "code": 13,
+        "label": "J",
+        "sensorId": 55
+      },
+      {
+        "code": 14,
+        "label": "K",
+        "sensorId": 56
+      },
+      {
+        "code": 15,
+        "label": "L",
+        "sensorId": 57
+      },
+      {
+        "code": 51,
+        "label": ";",
+        "sensorId": 58
+      },
+      {
+        "code": 52,
+        "label": "'",
+        "sensorId": 59
+      },
+      {
+        "width": 2.25,
+        "code": 40,
+        "label": "Enter",
+        "sensorId": 61
+      },
+      {
+        "code": 105,
+        "label": "NZXT",
+        "sensorId": 47
+      },
+      {
+        "code": 75,
+        "label": "Pg Up",
+        "sensorId": 99
+      }
+    ],
+    [
+      {
+        "width": 2.25,
+        "code": 225,
+        "label": "Shift",
+        "sensorId": 64
+      },
+      {
+        "code": 29,
+        "label": "Z",
+        "sensorId": 66
+      },
+      {
+        "code": 27,
+        "label": "X",
+        "sensorId": 67
+      },
+      {
+        "code": 6,
+        "label": "C",
+        "sensorId": 68
+      },
+      {
+        "code": 25,
+        "label": "V",
+        "sensorId": 69
+      },
+      {
+        "code": 5,
+        "label": "B",
+        "sensorId": 70
+      },
+      {
+        "code": 17,
+        "label": "N",
+        "sensorId": 71
+      },
+      {
+        "code": 16,
+        "label": "M",
+        "sensorId": 72
+      },
+      {
+        "code": 54,
+        "label": ",",
+        "sensorId": 73
+      },
+      {
+        "code": 55,
+        "label": ".",
+        "sensorId": 74
+      },
+      {
+        "code": 56,
+        "label": "/",
+        "sensorId": 75
+      },
+      {
+        "width": 2.75,
+        "code": 229,
+        "label": "Shift",
+        "sensorId": 77
+      },
+      {
+        "code": 82,
+        "label": "↑",
+        "sensorId": 78
+      },
+      {
+        "code": 78,
+        "label": "Pg Dn",
+        "sensorId": 105
+      }
+    ],
+    [
+      {
+        "width": 1.25,
+        "code": 224,
+        "label": "Ctrl",
+        "sensorId": 80
+      },
+      {
+        "width": 1.25,
+        "code": 227,
+        "label": "Win",
+        "sensorId": 81
+      },
+      {
+        "width": 1.25,
+        "code": 226,
+        "label": "Alt",
+        "sensorId": 82
+      },
+      {
+        "width": 6.25,
+        "code": 44,
+        "label": "Space",
+        "sensorId": 85
+      },
+      {
+        "width": 1.25,
+        "code": 230,
+        "label": "Alt",
+        "sensorId": 89
+      },
+      {
+        "width": 1.25,
+        "code": 4278190318,
+        "label": "Fn",
+        "sensorId": 90
+      },
+      {
+        "width": 1.25,
+        "code": 228,
+        "label": "Ctrl",
+        "sensorId": 92
+      },
+      {
+        "width": 0.25,
+        "code": null
+      },
+      {
+        "code": 80,
+        "label": "←",
+        "sensorId": 93
+      },
+      {
+        "code": 81,
+        "label": "↓",
+        "sensorId": 94
+      },
+      {
+        "code": 79,
+        "label": "→",
+        "sensorId": 110
+      }
+    ]
+  ],
+  "sensors": {
+    "0": {
+      "physicalKeyId": 41,
+      "canonicalKey": 0,
+      "label": "Esc"
+    },
+    "1": {
+      "physicalKeyId": 58,
+      "canonicalKey": 1,
+      "label": "F1"
+    },
+    "2": {
+      "physicalKeyId": 59,
+      "canonicalKey": 2,
+      "label": "F2"
+    },
+    "3": {
+      "physicalKeyId": 60,
+      "canonicalKey": 3,
+      "label": "F3"
+    },
+    "4": {
+      "physicalKeyId": 61,
+      "canonicalKey": 4,
+      "label": "F4"
+    },
+    "5": {
+      "physicalKeyId": 62,
+      "canonicalKey": 5,
+      "label": "F5"
+    },
+    "6": {
+      "physicalKeyId": 63,
+      "canonicalKey": 6,
+      "label": "F6"
+    },
+    "7": {
+      "physicalKeyId": 64,
+      "canonicalKey": 7,
+      "label": "F7"
+    },
+    "8": {
+      "physicalKeyId": 65,
+      "canonicalKey": 8,
+      "label": "F8"
+    },
+    "9": {
+      "physicalKeyId": 66,
+      "canonicalKey": 9,
+      "label": "F9"
+    },
+    "10": {
+      "physicalKeyId": 67,
+      "canonicalKey": 10,
+      "label": "F10"
+    },
+    "11": {
+      "physicalKeyId": 68,
+      "canonicalKey": 11,
+      "label": "F11"
+    },
+    "12": {
+      "physicalKeyId": 69,
+      "canonicalKey": 96,
+      "label": "F12"
+    },
+    "13": {
+      "physicalKeyId": 70,
+      "canonicalKey": 98,
+      "label": "Prt Sc"
+    },
+    "14": {
+      "physicalKeyId": 71,
+      "canonicalKey": 112,
+      "label": "Scr Lk"
+    },
+    "15": {
+      "physicalKeyId": 104,
+      "canonicalKey": 97,
+      "label": "F13"
+    },
+    "16": {
+      "physicalKeyId": 53,
+      "canonicalKey": 16,
+      "label": "`"
+    },
+    "17": {
+      "physicalKeyId": 30,
+      "canonicalKey": 17,
+      "label": "1"
+    },
+    "18": {
+      "physicalKeyId": 31,
+      "canonicalKey": 18,
+      "label": "2"
+    },
+    "19": {
+      "physicalKeyId": 32,
+      "canonicalKey": 19,
+      "label": "3"
+    },
+    "20": {
+      "physicalKeyId": 33,
+      "canonicalKey": 20,
+      "label": "4"
+    },
+    "21": {
+      "physicalKeyId": 34,
+      "canonicalKey": 21,
+      "label": "5"
+    },
+    "22": {
+      "physicalKeyId": 35,
+      "canonicalKey": 22,
+      "label": "6"
+    },
+    "23": {
+      "physicalKeyId": 36,
+      "canonicalKey": 23,
+      "label": "7"
+    },
+    "24": {
+      "physicalKeyId": 37,
+      "canonicalKey": 24,
+      "label": "8"
+    },
+    "25": {
+      "physicalKeyId": 38,
+      "canonicalKey": 25,
+      "label": "9"
+    },
+    "26": {
+      "physicalKeyId": 39,
+      "canonicalKey": 26,
+      "label": "0"
+    },
+    "27": {
+      "physicalKeyId": 45,
+      "canonicalKey": 27,
+      "label": "−"
+    },
+    "28": {
+      "physicalKeyId": 46,
+      "canonicalKey": 99,
+      "label": "="
+    },
+    "30": {
+      "physicalKeyId": 42,
+      "canonicalKey": 101,
+      "label": "Backspace"
+    },
+    "32": {
+      "physicalKeyId": 43,
+      "canonicalKey": 32,
+      "label": "Tab"
+    },
+    "33": {
+      "physicalKeyId": 20,
+      "canonicalKey": 33,
+      "label": "Q"
+    },
+    "34": {
+      "physicalKeyId": 26,
+      "canonicalKey": 34,
+      "label": "W"
+    },
+    "35": {
+      "physicalKeyId": 8,
+      "canonicalKey": 35,
+      "label": "E"
+    },
+    "36": {
+      "physicalKeyId": 21,
+      "canonicalKey": 36,
+      "label": "R"
+    },
+    "37": {
+      "physicalKeyId": 23,
+      "canonicalKey": 37,
+      "label": "T"
+    },
+    "38": {
+      "physicalKeyId": 28,
+      "canonicalKey": 38,
+      "label": "Y"
+    },
+    "39": {
+      "physicalKeyId": 24,
+      "canonicalKey": 39,
+      "label": "U"
+    },
+    "40": {
+      "physicalKeyId": 12,
+      "canonicalKey": 40,
+      "label": "I"
+    },
+    "41": {
+      "physicalKeyId": 18,
+      "canonicalKey": 41,
+      "label": "O"
+    },
+    "42": {
+      "physicalKeyId": 19,
+      "canonicalKey": 42,
+      "label": "P"
+    },
+    "43": {
+      "physicalKeyId": 47,
+      "canonicalKey": 43,
+      "label": "["
+    },
+    "44": {
+      "physicalKeyId": 48,
+      "canonicalKey": 102,
+      "label": "]"
+    },
+    "45": {
+      "physicalKeyId": 49,
+      "canonicalKey": 103,
+      "label": "\\"
+    },
+    "46": {
+      "physicalKeyId": 73,
+      "canonicalKey": 113,
+      "label": "Ins"
+    },
+    "47": {
+      "physicalKeyId": 105,
+      "canonicalKey": 115,
+      "label": "NZXT"
+    },
+    "48": {
+      "physicalKeyId": 57,
+      "canonicalKey": 48,
+      "label": "Caps"
+    },
+    "49": {
+      "physicalKeyId": 4,
+      "canonicalKey": 49,
+      "label": "A"
+    },
+    "50": {
+      "physicalKeyId": 22,
+      "canonicalKey": 50,
+      "label": "S"
+    },
+    "51": {
+      "physicalKeyId": 7,
+      "canonicalKey": 51,
+      "label": "D"
+    },
+    "52": {
+      "physicalKeyId": 9,
+      "canonicalKey": 52,
+      "label": "F"
+    },
+    "53": {
+      "physicalKeyId": 10,
+      "canonicalKey": 53,
+      "label": "G"
+    },
+    "54": {
+      "physicalKeyId": 11,
+      "canonicalKey": 54,
+      "label": "H"
+    },
+    "55": {
+      "physicalKeyId": 13,
+      "canonicalKey": 55,
+      "label": "J"
+    },
+    "56": {
+      "physicalKeyId": 14,
+      "canonicalKey": 56,
+      "label": "K"
+    },
+    "57": {
+      "physicalKeyId": 15,
+      "canonicalKey": 57,
+      "label": "L"
+    },
+    "58": {
+      "physicalKeyId": 51,
+      "canonicalKey": 58,
+      "label": ";"
+    },
+    "59": {
+      "physicalKeyId": 52,
+      "canonicalKey": 59,
+      "label": "'"
+    },
+    "61": {
+      "physicalKeyId": 40,
+      "canonicalKey": 104,
+      "label": "Enter"
+    },
+    "62": {
+      "physicalKeyId": 76,
+      "canonicalKey": 114,
+      "label": "Del"
+    },
+    "64": {
+      "physicalKeyId": 225,
+      "canonicalKey": 64,
+      "label": "Shift"
+    },
+    "66": {
+      "physicalKeyId": 29,
+      "canonicalKey": 65,
+      "label": "Z"
+    },
+    "67": {
+      "physicalKeyId": 27,
+      "canonicalKey": 66,
+      "label": "X"
+    },
+    "68": {
+      "physicalKeyId": 6,
+      "canonicalKey": 67,
+      "label": "C"
+    },
+    "69": {
+      "physicalKeyId": 25,
+      "canonicalKey": 68,
+      "label": "V"
+    },
+    "70": {
+      "physicalKeyId": 5,
+      "canonicalKey": 69,
+      "label": "B"
+    },
+    "71": {
+      "physicalKeyId": 17,
+      "canonicalKey": 70,
+      "label": "N"
+    },
+    "72": {
+      "physicalKeyId": 16,
+      "canonicalKey": 71,
+      "label": "M"
+    },
+    "73": {
+      "physicalKeyId": 54,
+      "canonicalKey": 72,
+      "label": ","
+    },
+    "74": {
+      "physicalKeyId": 55,
+      "canonicalKey": 73,
+      "label": "."
+    },
+    "75": {
+      "physicalKeyId": 56,
+      "canonicalKey": 74,
+      "label": "/"
+    },
+    "77": {
+      "physicalKeyId": 229,
+      "canonicalKey": 107,
+      "label": "Shift"
+    },
+    "78": {
+      "physicalKeyId": 82,
+      "canonicalKey": 116,
+      "label": "↑"
+    },
+    "80": {
+      "physicalKeyId": 224,
+      "canonicalKey": 80,
+      "label": "Ctrl"
+    },
+    "81": {
+      "physicalKeyId": 227,
+      "canonicalKey": 81,
+      "label": "Win"
+    },
+    "82": {
+      "physicalKeyId": 226,
+      "canonicalKey": 82,
+      "label": "Alt"
+    },
+    "85": {
+      "physicalKeyId": 44,
+      "canonicalKey": 84,
+      "label": "Space"
+    },
+    "89": {
+      "physicalKeyId": 230,
+      "canonicalKey": 86,
+      "label": "Alt"
+    },
+    "90": {
+      "physicalKeyId": 4278190318,
+      "canonicalKey": 87,
+      "label": "Fn"
+    },
+    "92": {
+      "physicalKeyId": 228,
+      "canonicalKey": 88,
+      "label": "Ctrl"
+    },
+    "93": {
+      "physicalKeyId": 80,
+      "canonicalKey": 89,
+      "label": "←"
+    },
+    "94": {
+      "physicalKeyId": 81,
+      "canonicalKey": 90,
+      "label": "↓"
+    },
+    "99": {
+      "physicalKeyId": 75,
+      "canonicalKey": 120,
+      "label": "Pg Up"
+    },
+    "104": {
+      "physicalKeyId": 77,
+      "canonicalKey": 119,
+      "label": "End"
+    },
+    "105": {
+      "physicalKeyId": 78,
+      "canonicalKey": 121,
+      "label": "Pg Dn"
+    },
+    "110": {
+      "physicalKeyId": 79,
+      "canonicalKey": 91,
+      "label": "→"
+    },
+    "115": {
+      "physicalKeyId": 72,
+      "canonicalKey": 117,
+      "label": "Pause"
+    },
+    "126": {
+      "physicalKeyId": 74,
+      "canonicalKey": 118,
+      "label": "Home"
+    }
+  },
+  "evidence": {
+    "sensorToCanonical": "firmware 2.2.14 flash 0x33530",
+    "canonicalToUsage": "firmware 2.2.14 flash 0x332f0",
+    "layout": "CAM 4.76.5 ANSI_CMPT_HID / wg"
+  }
+}
