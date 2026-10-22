@@ -68,7 +68,7 @@ async function edit<T extends C.EditResult>(
   },
   backend: C.DeviceBackend,
 ): Promise<T> {
-  const previous = snap.decode(await backend.snap()).find((p) => p.wireIndex === input.wireIndex);
+  const previous = snap.decode(await backend.snap(input.wireIndex)).find((p) => p.wireIndex === input.wireIndex);
   if (!previous) throw Error('Snap profile missing');
   if (!previous.configs.length) return operation();
   const id =

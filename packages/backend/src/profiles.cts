@@ -116,7 +116,7 @@ async function apply(
   backend: C.DeviceBackend = deviceBackend,
 ) {
   const proposed = plan(input),
-    initial = await backend.state(),
+    initial = await backend.connection(),
     originalActive = initial.activeProfileIndex,
     completed: C.CompletedEdit[] = [];
   const folder = path.join(profile, 'device-edits');
@@ -135,11 +135,11 @@ async function apply(
       if(result.backup) completed.push({ kind: 'field', backup: result.backup });
     }
     before = {
-      state: await backend.state(),
-      lighting: await backend.lighting(),
+      state: await backend.state(proposed.wireIndex),
+      lighting: await backend.lighting(proposed.wireIndex),
       actuation: await backend.actuation(),
       remaps: await remaps.readSlot(proposed.wireIndex, backend),
-      snap: await backend.snap(),
+      snap: await backend.snap(proposed.wireIndex),
     };
     const fd = fs.openSync(path.join(profile, backup), 'wx');
     try {
@@ -297,7 +297,7 @@ async function restore(profile: string, backup: string, backend: C.DeviceBackend
     before.remaps.records.length !== 352
   )
     throw Error('Incomplete profile backup');
-  const current = await backend.state();
+  const current = await backend.connection();
   if (current.activeProfileIndex !== slot)
     await edits.apply(profile, { field: 'activeProfile', wireIndex: slot, value: slot }, backend);
   await edits.applySnapRaw(profile, { wireIndex: slot, data: snap.encode([]) }, backend);

@@ -45,3 +45,5 @@ try {
   }
   foreach ($frame in $frames) { $writer.Write([byte[]]$frame.Bytes) }
 } finally { $writer.Dispose() }
+$taskIconVersion = (Get-Content -LiteralPath (Join-Path $PSScriptRoot '../package.json') -Raw | ConvertFrom-Json).version
+Copy-Item -LiteralPath (Join-Path $iconOutput 'app.ico') -Destination (Join-Path $iconOutput ('opentkl-' + $taskIconVersion + '.ico')) -Force

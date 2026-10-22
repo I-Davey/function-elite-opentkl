@@ -629,9 +629,10 @@ export const KeyRemapDeviceProfile = types
           snapOverrideConfigs: [config],
         });
     },
-    resetHardwareSnapOverrides() {
+    resetHardwareSnapOverrides(slot?: number) {
       if (!self.hardwareKeyRemapSettingsMap) self.resetHardwareKeyRemapSettings();
-      self.hardwareKeyRemapSettingsMap?.forEach((item) => item.snapOverrideConfigs.clear());
+      if (slot === undefined) self.hardwareKeyRemapSettingsMap?.forEach((item) => item.snapOverrideConfigs.clear());
+      else self.hardwareKeyRemapSettingsMap?.get(String(slot))?.snapOverrideConfigs.clear();
     },
     addSoftwareKeyRemapSetting(
       device: KeyboardRemapDevice,

@@ -11,6 +11,7 @@ import * as keyboardIpcModule from './main/keyboard-ipc.cjs';
 import { createAnalogue } from './main/analogue.cjs';
 import { watchApplications } from './main/applications.cjs';
 import { createTray } from './main/tray.cjs';
+import { registerUpdater } from './main/updater.cjs';
 ('use strict');
 // Owned host with an independent allowlisted HID backend; no original CAM addon/helper.
 const {
@@ -73,7 +74,16 @@ app
         webSecurity: true,
       },
     });
+    win.setAppDetails({
+      appId: 'FunctionElite.OpenTKL',
+      appIconPath: path.join(__dirname, '../resources/icons', 'opentkl-' + app.getVersion() + '.ico'),
+      relaunchCommand: '"' + process.execPath + '"' +
+        (path.basename(process.execPath).toLowerCase() === 'electron.exe' ? ' "' + __dirname + '"' : '') +
+        ' "--data-dir=' + dataRoot + '"',
+      relaunchDisplayName: 'Function Elite OpenTKL',
+    });
     win.removeMenu();
+    registerUpdater(ipcMain, win, profile, record, !testing);
     analogue = createAnalogue(profile, serial);
     analogue.register(ipcMain, win);
     if (!testing) createTray({ app, Tray, Menu }, win, analogue, dataRoot, record);

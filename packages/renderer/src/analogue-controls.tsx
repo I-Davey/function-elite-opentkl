@@ -7,6 +7,7 @@ import type { KeyboardViewPort } from '../../sensor-monitor/src/types.js';
 import { getKeyInfo } from '../../keyboard-ui/src/layouts/keyInfo.js';
 import { jsKeyToKeyMap } from '../../keyboard-ui/src/layouts/keyboardInfo.js';
 import { KeyboardAnaloguePreview } from '../../keyboard-ui/src/components/KeyboardAnaloguePreview.js';
+import { AngleDownIcon } from '../../keyboard-ui/src/components/icons/AngleDownIcon.js';
 
 type ResponseCurve = Pick<Binding, 'startMm' | 'endMm' | 'curve' | 'strength' | 'points' | 'outputMin' | 'outputMax' | 'smoothMs'>;
 const pendingEditors = new Set<() => Promise<void>>();
@@ -163,6 +164,7 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
 }) {
   const { settings, state, ready, busy, error, saved, update, act, setState, setSettings, setSaved } = useAnalogueProfile(host, profileId);
   const [selected, setSelected] = useState(26), [copiedCurve, setCopiedCurve] = useState<ResponseCurve | null>(null);
+  const [exportPath, setExportPath] = useState('');
   const [capturingShortcut, setCapturingShortcut] = useState(false), captured = useRef<number[]>([]);
   useEffect(() => {
     void host.analogueShortcutCapture(capturingShortcut).catch(() => setCapturingShortcut(false));
@@ -187,8 +189,9 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
       <button className="shell-button" title="Import analogue mappings and curves into this profile" disabled={!ready || busy || state?.preview} onClick={() => void act(async () => {
         const value = await host.analogueImport(); if (value) { setState(value); setSettings(value.settings); setSaved(true); }
       })}>Import</button>
-      <button className="shell-button" title="Export this profile's analogue mappings and curves" disabled={!ready || busy || state?.preview} onClick={() => void act(() => host.analogueExport())}>Export</button>
+      <button className="shell-button" title="Save analogue mappings and curves to Downloads and show the file" disabled={!ready || busy || state?.preview} onClick={() => void act(async () => { const file = await host.analogueExport(); if (file) setExportPath(file); })}>Export</button>
     </>, profileActions)}
+    {exportPath && <p className="analog-hint" role="status">Exported to {exportPath}</p>}
     {(error || state?.error || state?.feedbackError) && <div className="analog-error" role="alert">{error || state?.error || state?.feedbackError}
       {state?.recoveryPending && <button className="shell-button" disabled={busy} onClick={() => void act(async () => setState(await host.analogueEnable(false)))}>Restore normal keys</button>}</div>}
     <div className="keyboard-preview-card analogue-keyboard-card">
@@ -198,10 +201,11 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
           <span className="analog-status"><span className={'connection-dot ' + (state?.connected ? 'is-connected' : '')} />
             {state?.transitioning ? 'Release mapped keys to switch' : state?.overriddenKeys.length ? 'Controller off' : state?.calibration ? 'Calibrating' : state?.running ? state.connected ? 'Live · ' + state.rateHz.toFixed(0) + ' Hz' : 'Waiting for keys' : state?.preview ? 'Preview' : 'Off'}</span>
           {!saved && <span className="analog-save-state">Saving…</span>}
+          <div className="analog-output-control">
           <label className="analog-output-toggle"><input type="checkbox" checked={state?.running ?? false}
             disabled={busy || !ready || state?.preview || (!state?.running && enabledCount === 0)}
             onChange={(event) => { const enabled = event.target.checked; void act(async () => setState(await host.analogueEnable(enabled))); }} />Controller output</label>
-          <details className="analog-popover analog-override-menu"><summary title="In-game override settings" aria-label="In-game override settings">⌄</summary>
+          <details className="analog-popover analog-override-menu"><summary title="In-game override settings" aria-label="In-game override settings"><AngleDownIcon aria-hidden="true" focusable="false" /></summary>
             <div className="analog-popover-content">
               <strong>Controller shortcut</strong>
               <fieldset className="analog-editor-fields" disabled={!ready || busy}>
@@ -220,10 +224,11 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
                   event.preventDefault(); event.stopPropagation();
                   if (captured.current.length) { changeOverride({ shortcut: [...captured.current] }); setCapturingShortcut(false); }
                 }}>{capturingShortcut ? 'Press shortcut…' : settings.override.shortcut.map(keyLabel).join(' + ') || 'Choose shortcut'}</button></label>
-              <p className="analog-hint">Toggles all controller controls on or off, including in-game. Normal keys return when released. Use unmapped shortcut keys.</p>
+              <p className="analog-hint">Toggles all controller controls on or off, including in-game. After a sensor timeout, release the shortcut and press it again to retry. Normal keys return when released. Use unmapped shortcut keys.</p>
               </fieldset>
             </div>
           </details>
+          </div>
         </div></div>
       <div className="analogue-keyboard-surface">
         <KeyboardAnaloguePreview layout={layout} keyboardInfo={keyboardInfo} bindings={settings.bindings} selected={selected}

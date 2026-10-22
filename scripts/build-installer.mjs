@@ -50,8 +50,8 @@ const stem='Function-Elite-OpenTKL-'+manifest.version+'-windows-x64';
 run(compiler,['/Q',`/DAppVersion=${manifest.version}`,`/DPackageRoot=${candidate.output}`,`/DDriverInstaller=${driver}`,`/DOutputRoot=${output}`,`/DOutputName=${stem}-Setup`,path.join(root,'installer/opentkl.iss')]);
 const portable=path.join(output,stem+'-Portable.zip');
 if(fs.existsSync(portable))fs.unlinkSync(portable);
-const archived=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','Compress-Archive -LiteralPath $env:OPENTKL_PACKAGE -DestinationPath $env:OPENTKL_ZIP -CompressionLevel Optimal'],{
-  cwd:root,stdio:'inherit',windowsHide:true,env:{...environment,OPENTKL_PACKAGE:candidate.output,OPENTKL_ZIP:portable},
+const archived=spawnSync('tar.exe',['-a','-c','-f',portable,'-C',path.dirname(candidate.output),path.basename(candidate.output)],{
+  cwd:root,stdio:'inherit',windowsHide:true,env:environment,
 });
 if(archived.error)throw archived.error;if(archived.status!==0)throw Error('Portable ZIP creation failed.');
 const files=[path.join(output,stem+'-Setup.exe'),portable];

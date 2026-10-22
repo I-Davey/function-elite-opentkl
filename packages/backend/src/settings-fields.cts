@@ -51,8 +51,8 @@ async function apply(
   backend: C.DeviceBackend = deviceBackend,
 ) {
   const spec = validate(input),
-    before = spec.active ? await backend.connection() : await backend.state();
-  if ('profiles' in before) stateModule.decode(before);
+    before = spec.active || spec.channel !== undefined ? await backend.connection() : await backend.state(input.wireIndex);
+  if ('profiles' in before) stateModule.decode({ ...before, activeProfileIndex: input.wireIndex }, before.profiles.length === 1);
   const previous = spec.active
     ? before.activeProfileIndex
     : spec.channel === undefined

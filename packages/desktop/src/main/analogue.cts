@@ -5,6 +5,7 @@ import { registrar } from '../../../contracts/desktop-channels.cjs';
 import { object, errorMessage } from '../../../contracts/desktop.cjs';
 import { AnalogueEngine, OverrideShortcut, binding, emptyProfile, neutralFrame, parseProfile, type AnalogueProfile, type AnalogueState, type CalibrationState, type TravelCalibration } from '../../../contracts/desktop-analogue.cjs';
 import { createAnalogueFeedback, restoreAnalogueLighting } from './analogue-feedback.cjs';
+import { createRuntimeRemaps, restoreRuntimeRemaps, runtimeJournal } from './analogue-runtime-remaps.cjs';
 import * as devices from '../../../backend/src/devices.cjs';
 import * as depth from '../../../backend/src/depth.cjs';
 import * as remaps from '../../../backend/src/remaps.cjs';
@@ -12,6 +13,7 @@ import { durable, replaceDurable } from '../../../backend/src/transaction-journa
 import type { RemapRawInput, RemapRequest, Connection } from '../../../backend/src/contracts.cjs';
 import { ProfileStore } from './profile-store.cjs';
 import { profileId as validId } from '../../../contracts/desktop-profiles.cjs';
+import { exportJson } from './export-json.cjs';
 
 interface Controller { initialize(file: string): string; setEnabled(enabled: boolean): string; update(report: string): string; status(): string }
 interface Journal { devicePath: string; records: RemapRawInput[] }
@@ -37,6 +39,7 @@ function readKeyJournal(profile: string): Journal | undefined {
 }
 /** Idempotent recovery: only replace our temporary mapping, never an unrelated user edit. */
 export async function restoreAnalogueKeys(profile: string, keys?: number[]): Promise<void> {
+  if (!keys) await restoreRuntimeRemaps(profile);
   const saved = readKeyJournal(profile);
   if (!saved) return;
   const connection = await devices.connection();
@@ -84,10 +87,11 @@ export function createAnalogue(profile: string, serial: Serial) {
   let outputWanted = false;
   let activeDevice = '', activeSlot = -1;
   let running = false, generation = 0, timer: NodeJS.Timeout | undefined, lastSample = 0, lastTick = 0, rateHz = 0, error = loadError;
+  let shortcutMonitoring = false;
   let latest: (ReturnType<typeof depth.decode> & { roundTripMs: number }) | undefined;
   let frame = neutralFrame();
   const engine = new AnalogueEngine();
-  const shortcut = new OverrideShortcut(), feedback = createAnalogueFeedback(profile);
+  const shortcut = new OverrideShortcut(), feedback = createAnalogueFeedback(profile), runtimeRemaps = createRuntimeRemaps(profile);
   let shortcutCaptureUntil = 0;
   let overriddenKeys: number[] = [], transitioning = false, feedbackError = '', feedbackFailed = false;
   let calibration: CalibrationState | null = null, resumeAfterCalibration = false;
@@ -97,9 +101,9 @@ export function createAnalogue(profile: string, serial: Serial) {
     connected: lastSample > 0 && Date.now() - lastSample < 200, error, rateHz,
     overriddenKeys, overrideRequested: shortcut.active, transitioning, calibration, feedbackError,
     sampleAgeMs: lastSample ? Date.now() - lastSample : null,
-    recoveryPending: fs.existsSync(journalFile(profile)) || fs.existsSync(path.join(profile, 'analogue-lighting-session.json')), preview: false });
+    recoveryPending: fs.existsSync(journalFile(profile)) || fs.existsSync(runtimeJournal(profile)) || fs.existsSync(path.join(profile, 'analogue-lighting-session.json')), preview: false });
   const silence = (detach = true) => {
-    running = false; generation++; clearTimeout(timer); engine.reset(); frame = neutralFrame(); latest = undefined; lastSample = 0; rateHz = 0;
+    running = false; shortcutMonitoring = false; generation++; clearTimeout(timer); engine.reset(); frame = neutralFrame(); latest = undefined; lastSample = 0; rateHz = 0;
     shortcut.reset(); overriddenKeys = []; transitioning = false; calibration = null; calibrationSamples = []; released = undefined;
     if (detach) output?.setEnabled(false);
     else output?.update('0,0,0,0,0,0,0');
@@ -108,12 +112,13 @@ export function createAnalogue(profile: string, serial: Serial) {
   const stopInside = async (detach = true) => {
     silence(detach);
     const failures: string[] = [];
-    for (const restore of [() => restoreAnalogueKeys(profile), () => feedback.stop()]) {
+    for (const restore of [() => runtimeRemaps.stop(), () => restoreAnalogueKeys(profile), () => feedback.stop()]) {
       try { await restore(); } catch (caught) { failures.push(errorMessage(caught)); }
     }
     if (failures.length) throw Error(failures.join(' · '));
   };
   async function suppress(excluded: number[] = [], only?: number[]) {
+    if (runtimeRemaps.active) { await runtimeRemaps.update(suppressedKeys(settings, excluded)); return; }
     const previous = readKeyJournal(profile);
     const keys = suppressedKeys(settings, excluded).filter(key => (!only || only.includes(key)) && !previous?.records.some(record => record.physicalKey === key));
     if (!keys.length) return;
@@ -149,10 +154,10 @@ export function createAnalogue(profile: string, serial: Serial) {
     }
   }
   async function tick(ticket: number) {
-    if ((!running && !calibration) || ticket !== generation) return;
+    if ((!running && !calibration && !shortcutMonitoring) || ticket !== generation) return;
     try {
       await serial(async () => {
-        if ((!running && !calibration) || ticket !== generation) return;
+        if ((!running && !calibration && !shortcutMonitoring) || ticket !== generation) return;
         const started = Date.now(), snapshot = depth.decode(await devices.sensors()), now = Date.now();
         if (now - started > 200) throw Error('Sensor readings are too slow; analogue output stopped');
         latest = { ...snapshot, roundTripMs: now - started };
@@ -163,6 +168,19 @@ export function createAnalogue(profile: string, serial: Serial) {
           const valid = c && c.factoryBaseline === key.baseline && c.factoryScale === key.scale && c.factoryPressed === key.pressed;
           return [String(key.physicalKeyId), valid ? depth.estimate((key.adc - c.released) / (c.pressed - c.released) * depth.fullCoefficient) : key.millimetresEstimate];
         }));
+        if (shortcutMonitoring) {
+          frame = { ...neutralFrame(), rawMm };
+          lastTick = lastSample = now;
+          if (now >= shortcutCaptureUntil && !shortcut.update(rawMm, settings.override)) {
+            try { await startInside(); }
+            catch (caught) {
+              error = errorMessage(caught);
+              try { await stopInside(); } catch (recovery) { error += ' · ' + errorMessage(recovery); return; }
+              monitorShortcut();
+            }
+          }
+          return;
+        }
         if (calibration) {
           const key = snapshot.keys.find(key => key.physicalKeyId === calibration!.key);
           if (!key) throw Error('Calibration key is unavailable');
@@ -189,9 +207,12 @@ export function createAnalogue(profile: string, serial: Serial) {
             if (restore.length || add.length) {
               const neutral = output!.update('0,0,0,0,0,0,0');
               if (neutral !== 'updated') throw Error(neutral);
-              await paint(targets, Date.now(), [...blocked]);
-              if (restore.length) await restoreAnalogueKeys(profile, restore);
-              if (add.length) await suppress(targets, add);
+              if (runtimeRemaps.active) await runtimeRemaps.update(after);
+              else {
+                await paint(targets, Date.now(), [...blocked]);
+                if (restore.length) await restoreAnalogueKeys(profile, restore);
+                if (add.length) await suppress(targets, add);
+              }
             }
             overriddenKeys = targets; transitioning = false; engine.reset();
           }
@@ -199,12 +220,29 @@ export function createAnalogue(profile: string, serial: Serial) {
         }
         lastTick = lastSample = now;
       });
-      if ((running || calibration) && ticket === generation) timer = setTimeout(() => void tick(ticket), 1);
+      if ((running || calibration || shortcutMonitoring) && ticket === generation) timer = setTimeout(() => void tick(ticket), shortcutMonitoring ? 100 : 1);
     } catch (caught) {
       if (ticket !== generation) return;
-      error = errorMessage(caught); outputWanted = false; silence();
-      try { await serial(async () => { await restoreAnalogueKeys(profile); await restoreAnalogueLighting(profile); }); } catch (recovery) { error += ' · ' + errorMessage(recovery); }
+      error = errorMessage(caught); outputWanted = false;
+      if (shortcutMonitoring) {
+        // A bad sample must never count as a fresh shortcut press.
+        latest = undefined; lastSample = 0; frame = neutralFrame(); shortcut.active = true; shortcut.rearm();
+        timer = setTimeout(() => void tick(ticket), 500);
+        return;
+      }
+      silence();
+      const recoveryTicket = generation;
+      try { await serial(async () => {
+        if (generation !== recoveryTicket) return;
+        await stopInside();
+        monitorShortcut();
+      }); } catch (recovery) { error += ' · ' + errorMessage(recovery); }
     }
+  }
+  function monitorShortcut() {
+    if (!settings.override.enabled || !settings.override.shortcut.length || !Object.values(settings.bindings).some(b => b.enabled)) return;
+    shortcutMonitoring = true; shortcut.active = true; shortcut.rearm();
+    timer = setTimeout(() => void tick(generation), 100);
   }
   async function startInside(paused = false) {
     if (!Object.values(settings.bindings).some((b) => b.enabled)) throw Error('Map at least one key first');
@@ -224,7 +262,11 @@ export function createAnalogue(profile: string, serial: Serial) {
     }
     const result = output.setEnabled(true);
     if (result !== 'enabled') throw Error(result + '. Install the ViGEmBus driver if it is missing.');
-    try { if (!paused) await suppress(); } catch (caught) { await stopInside(); throw caught; }
+    try {
+      await runtimeRemaps.start(suppressedKeys(settings), activeSlot);
+      if (runtimeRemaps.active) await runtimeRemaps.update(paused ? [] : suppressedKeys(settings));
+      else if (!paused) await suppress();
+    } catch (caught) { await stopInside(); throw caught; }
     shortcut.active = paused;
     outputWanted = !paused;
     if (paused) overriddenKeys = Object.keys(settings.bindings).map(Number).filter(key => settings.bindings[key].enabled).sort((a, b) => a - b);
@@ -241,7 +283,7 @@ export function createAnalogue(profile: string, serial: Serial) {
     if (id !== profileId) {
       await stopInside(false); profileId = id; settings = profiles[id] ?? emptyProfile(); error = loadError;
     }
-    if (!running && (outputWanted || settings.override.enabled) && Object.values(settings.bindings).some(b=>b.enabled)) {
+    if (!running && !shortcutMonitoring && (outputWanted || settings.override.enabled) && Object.values(settings.bindings).some(b=>b.enabled)) {
       try { await startInside(!outputWanted); } catch (caught) { error=errorMessage(caught); }
     }
     return state();
@@ -295,17 +337,19 @@ export function createAnalogue(profile: string, serial: Serial) {
     removeProfile: (id: string) => { validId(id); delete profiles[id]; store.writeExtra('analogueProfiles', profiles); },
     state, stopInside, latest: () => running && latest && Date.now() - lastSample < 100 ? latest : undefined,
     async observeConnection(connection: Connection) {
-      if ((running || calibration) && (connection.devicePath !== activeDevice || connection.activeProfileIndex !== activeSlot)) {
+      if ((running || calibration || shortcutMonitoring) && (connection.devicePath !== activeDevice || connection.activeProfileIndex !== activeSlot)) {
         await stopInside(connection.devicePath !== activeDevice); error = 'Controller stopped because the keyboard profile changed';
       }
     },
     async beforeConfiguration() {
+      const resumeShortcut = shortcutMonitoring;
       const resume = running ? { profileId, activeDevice, activeSlot, paused: shortcut.active } : undefined;
-      if (running || calibration || fs.existsSync(journalFile(profile)) || fs.existsSync(path.join(profile, 'analogue-lighting-session.json'))) {
+      if (running || calibration || shortcutMonitoring || fs.existsSync(journalFile(profile)) || fs.existsSync(runtimeJournal(profile)) || fs.existsSync(path.join(profile, 'analogue-lighting-session.json'))) {
         // Settings writes pause input without making the game rediscover its controller.
         await stopInside(false); error = 'Stopped for keyboard settings changes';
       }
       return async () => {
+        if (resumeShortcut) { monitorShortcut(); return; }
         if (!resume || profileId !== resume.profileId) return;
         const connection = await devices.connection();
         // A different profile must select its own bindings before output can resume.
@@ -377,12 +421,7 @@ export function createAnalogue(profile: string, serial: Serial) {
         if (fs.statSync(chosen.filePaths[0]).size > 1024 * 1024) throw Error('Analogue settings file is too large');
         return replace(JSON.parse(fs.readFileSync(chosen.filePaths[0], 'utf8')));
       }));
-      handle('keyboard:analogue-export', async () => {
-        const { dialog }: Pick<Electron, 'dialog'> = require('electron');
-        const chosen = await dialog.showSaveDialog(win, { title: 'Export analogue mappings', defaultPath: path.join(profile, 'analog-settings.json'), filters: [{ name: 'Analogue settings', extensions: ['json'] }] });
-        if (chosen.canceled || !chosen.filePath) return null;
-        fs.writeFileSync(chosen.filePath, JSON.stringify(settings, null, 2) + '\n'); return chosen.filePath;
-      });
+      handle('keyboard:analogue-export', () => exportJson('analogue-mappings', settings));
     },
   };
 }

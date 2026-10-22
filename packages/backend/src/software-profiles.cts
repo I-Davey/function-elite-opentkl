@@ -32,9 +32,9 @@ function verified(result: {outcome:string;error?:string}) {
 /** Prepare the one original snapshot while onboard remains active; no device writes. */
 async function prepare(profile: string, backend: C.DeviceBackend = deviceBackend): Promise<void> {
   if (fs.existsSync(location(profile))) return;
-  const state=await backend.state();
+  const state=await backend.state(4);
   if(state.activeProfileIndex===4) return;
-  const before={state,lighting:await backend.lighting(),remaps:await remaps.readSlot(4,backend)};
+  const before={state,lighting:await backend.lighting(4),remaps:await remaps.readSlot(4,backend)};
   const id=new Date().toISOString().replaceAll(':','-')+'-'+crypto.randomBytes(4).toString('hex');
   const backup='device-edits/'+id+'-software-before.json';
   const session:C.SoftwareSession={schemaVersion:1,kind:'software-session',returnSlot:state.activeProfileIndex,backup,before,prepared:true};
@@ -74,7 +74,7 @@ async function apply(
       await edits.apply(profile, { field: 'activeProfile', wireIndex: 4, value: 4 }, backend);
     }
     if (!session.before.snap) {
-      session.before.snap = await backend.snap();
+      session.before.snap = await backend.snap(4);
       save(location(profile), session);
     }
     const previous = session.lastInput ? profiles.plan(session.lastInput, true) : undefined;
@@ -88,7 +88,7 @@ async function apply(
       if(snapModule.normalize(currentSnap)===snapModule.normalize(data))return;
       verified(await backend.applySnap({wireIndex:4,data,expectedActive:4,expectedData:currentSnap}));currentSnap=data;
     };
-    if(refreshSnap){currentSnap=required(snapModule.decode(await backend.snap()).find(p=>p.wireIndex===4)).data;await setSnap('00'.repeat(15));}
+    if(refreshSnap){currentSnap=required(snapModule.decode(await backend.snap(4)).find(p=>p.wireIndex===4)).data;await setSnap('00'.repeat(15));}
     const metadata=required(session.before.state.profiles.find(p=>p.wireIndex===4));
     const fieldKeys={pollingRate:'field0',gameMode:'field3',fnLock:'field4',idleMinutes:'field5'} as const;
     const brightness=plan.fields.some(([field])=>field.startsWith('brightness')) ? (await backend.connection()).brightnessChannels : [];
@@ -104,7 +104,7 @@ async function apply(
       if(!lightingEquivalent(expectedData,layer.data,layer.layer)) {
         const result=await backend.applyLighting({wireIndex:4,...layer,expectedActive:4,expectedData});
         if(result.outcome==='uncertain') {
-          const observed=await backend.lighting();
+          const observed=await backend.lighting(4);
           const data=required(required(observed.profiles.find(p=>p.wireIndex===4)).layers.find(item=>item.kind===layer.layer)).data;
           if(observed.activeProfileIndex!==4 || !lightingEquivalent(data,layer.data,layer.layer)) verified(result);
           actualLighting[layer.layer]=data;
@@ -178,7 +178,7 @@ async function release(profile: string, backend: C.DeviceBackend = deviceBackend
   if(session.prepared){fs.unlinkSync(location(profile));return {outcome:'unchanged'};}
   // Record the return controls before any temporary selection can load stored
   // brightness. Retries retain this target instead of recapturing reset values.
-  const state = await backend.state();
+  const state = await backend.connection();
   if (session.releaseTarget !== undefined && !validReturnTarget(session.releaseTarget))
     throw Error('Invalid software release target');
   if (session.returnTarget !== undefined && !validReturnTarget(session.returnTarget))

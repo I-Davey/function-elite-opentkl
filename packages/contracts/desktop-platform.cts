@@ -3,7 +3,8 @@ export interface CancelableEvent {
   preventDefault(): void;
 }
 export interface App {
-  getPath(name: 'appData'): string;
+  getVersion(): string;
+  getPath(name: 'appData' | 'downloads'): string;
   setPath(name: 'userData' | 'sessionData' | 'logs' | 'crashDumps', value: string): void;
   setName(name: string): void;
   setAppUserModelId(id: string): void;
@@ -59,6 +60,7 @@ export interface Window {
   focus(): void;
   close(): void;
   removeMenu(): void;
+  setAppDetails(options: { appId: string; appIconPath: string; relaunchCommand: string; relaunchDisplayName: string }): void;
   loadFile(file: string, options: { query: Record<string, string> }): Promise<void>;
   on(event: 'closed', listener: () => void): void;
   on(event: 'close', listener: (event: CancelableEvent) => void): void;
@@ -107,11 +109,20 @@ export interface Dialog {
   ): Promise<{ canceled: boolean; filePath?: string }>;
 }
 export interface Electron {
+  Notification: {
+    new (options: { title: string; body: string }): {
+      on(event: 'click', callback: () => void): void;
+      on(event: 'failed', callback: (message: string) => void): void;
+      show(): void;
+    };
+    isSupported(): boolean;
+  };
   app: App;
   BrowserWindow: new (options: WindowOptions) => Window;
   ipcMain: IpcMain;
   session: { defaultSession: import('../backend/src/session-policy.cjs').ProtectedSession };
   dialog: Dialog;
+  shell: { showItemInFolder(file: string): void };
   contextBridge: { exposeInMainWorld(name: string, api: object): void };
   ipcRenderer: IpcRenderer;
   Tray: new (icon: string) => Tray;

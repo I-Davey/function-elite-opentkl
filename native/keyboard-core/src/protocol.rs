@@ -36,6 +36,7 @@ impl Keyboard {
         }
         match (command, arguments) {
             (1 | 0x44 | 0x61 | 0x63, []) => true,
+            (0x83, []) => true,
             (0x88, [2, slot]) => *slot < 4 || *slot == 255,
             (0x40, [channel]) => *channel < 2,
             (0x56 | 0x58 | 0x5a, [slot]) => *slot < 5 || *slot == 255,
@@ -49,6 +50,7 @@ impl Keyboard {
         }
     }
     fn query(&mut self, command: u8, arguments: &[u8]) -> Result<Vec<u8>, String> {
+        let started = std::time::Instant::now();
         if !self.allowed(command, arguments) {
             return Err("Keyboard request outside implemented contract".into());
         }
@@ -70,7 +72,7 @@ impl Keyboard {
                 fragment_acks.push(hex(&ack));
             }
         }
-        let lighting = [0x31, 0x34, 0x38, 0x51, 0x97].contains(&command);
+        let lighting = [0x31, 0x34, 0x38, 0x51, 0x97, 0x83].contains(&command);
         let mut decoder = Frames::new(if lighting { 4090 } else { 1024 });
         let mut frames = Vec::new();
         for _ in 0..if lighting { 78 } else { 20 } {
@@ -87,7 +89,7 @@ impl Keyboard {
             if decoder.push(&frame)? {
                 let result = decoder.bytes;
                 self.journal.push(json!({"command":command,"selector":if arguments.len()==2 {arguments[1] as i32}else{-1},
-                    "arguments":hex(arguments),"request":hex(&request),"requests":sent,"fragmentAcknowledgements":fragment_acks,"frames":frames,"payloadLength":result.len(),"response":hex(&result)}));
+                    "arguments":hex(arguments),"request":hex(&request),"requests":sent,"fragmentAcknowledgements":fragment_acks,"frames":frames,"payloadLength":result.len(),"response":hex(&result),"elapsedUs":started.elapsed().as_micros()}));
                 return Ok(result);
             }
         }
@@ -133,7 +135,7 @@ impl Keyboard {
         }
         Ok(())
     }
-    fn state(&mut self) -> Result<Value, String> {
+    fn state(&mut self, selected: Option<u8>) -> Result<Value, String> {
         let active = self.profile_index()?;
         let keys = self.byte(0x40, &[0])?;
         let ring = self.byte(0x40, &[1])?;
@@ -141,7 +143,7 @@ impl Keyboard {
             return Err("Invalid keyboard brightness".into());
         }
         let mut profiles = Vec::new();
-        for slot in 0..5 {
+        for slot in selected.map_or_else(|| (0..5).collect::<Vec<_>>(), |slot| vec![slot]) {
             profiles.push(json!({"wireIndex":slot,"field0":self.field(0x5c,slot)?,"field3":self.field(0x56,slot)?,
                 "field4":self.field(0x58,slot)?,"field5":self.field(0x5a,slot)?,"field7":self.field(0x73,slot)?}));
         }
@@ -179,10 +181,10 @@ impl Keyboard {
         }
         Ok(json!({"supportedCount":keys.len(),"keys":keys}))
     }
-    fn lighting(&mut self) -> Result<Value, String> {
+    fn lighting(&mut self, selected: Option<u8>) -> Result<Value, String> {
         let active = self.profile_index()?;
         let mut profiles = Vec::new();
-        for slot in 0..5 {
+        for slot in selected.map_or_else(|| (0..5).collect::<Vec<_>>(), |slot| vec![slot]) {
             let mut layers = Vec::new();
             for (command, kind) in [(0x31, "Base"), (0x34, "Ring"), (0x38, "Reactive")] {
                 let response = self.query(command, &[slot])?;
@@ -556,8 +558,8 @@ impl Keyboard {
         }
         let mut attempted = false;
         let result = (|| -> Result<(), String> {
+            self.same_profile(active)?;
             for (slot,args,_,setter,clear,data) in &changes {
-                self.same_profile(active)?;
                 let mut arguments = args.clone();
                 let command = if data.is_empty() { arguments.push(0); *clear } else { arguments.extend(data); *setter };
                 self.authorized_write = Some((command, arguments.clone()));
@@ -578,6 +580,59 @@ impl Keyboard {
         Ok(match result {
             Ok(()) => json!({"outcome":if attempted {"applied"} else {"unchanged"},"mutationAttempted":attempted,"verifiedRecords":records.len()}),
             Err(error) => json!({"outcome":"uncertain","mutationAttempted":attempted,"error":error}),
+        })
+    }
+    fn runtime_remaps(&mut self) -> Result<Vec<u8>, String> {
+        let response = self.query(0x83, &[])?;
+        let data = match response.first() {
+            Some(2) if response.len() == 1 => Vec::new(),
+            Some(1) => response[1..].to_vec(),
+            _ => return Err("Invalid runtime mapping response".into()),
+        };
+        crate::remap::runtime_table(&json!(hex(&data)))?;
+        Ok(data)
+    }
+    fn runtime_write(&mut self, command: u8, data: &[u8]) -> Result<(), String> {
+        self.authorized_write = Some((command, data.to_vec()));
+        let response = self.query(command, data);
+        self.authorized_write = None;
+        if response? != vec![1] { return Err("Runtime mapping operation rejected".into()); }
+        Ok(())
+    }
+    fn apply_runtime_remaps(&mut self, request: Value) -> Result<Value, String> {
+        crate::remap::validate_runtime(&request)?;
+        let active = request["expectedActive"].as_u64().unwrap() as u8;
+        self.same_profile(active)?;
+        let expected = crate::remap::runtime_table(&request["expectedData"])?;
+        let data = crate::remap::runtime_table(&request["data"])?;
+        if self.runtime_remaps()? != expected { return Err("Runtime mappings changed outside analogue control".into()); }
+        let restore = request["restore"].as_bool().unwrap();
+        // Identical bytes can still be inactive after a profile selection; upload to activate them.
+        let result = (|| -> Result<(), String> {
+            self.runtime_write(0x84, &[])?;
+            if !data.is_empty() { self.runtime_write(0x82, &data)?; }
+            if self.runtime_remaps()? != data { return Err("Runtime mapping readback mismatch".into()); }
+            if restore {
+                // Reselecting the software slot restores the stored/runtime lookup mode.
+                self.runtime_write(0x45, &[active])?;
+                // Profile selection queues a firmware task; cleanup is outside the toggle path.
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                self.same_profile(active)?;
+                if active == 4 {
+                    let actuation = self.apply_software_actuation(json!({"expectedActive":4,"keys":request["keys"]}))?;
+                    if actuation["outcome"] != "acknowledged" { return Err("Could not restore software actuation".into()); }
+                    let snap_before = self.query(0x88, &[2,255])?;
+                    if snap_before.len() != 18 || snap_before[..3] != [1,255,3] { return Err("Could not read software Snap settings".into()); }
+                    let snap = self.apply_snap(json!({"wireIndex":4,"expectedActive":4,"expectedData":hex(&snap_before[3..]),"data":request["snap"]}))?;
+                    if snap["outcome"] != "applied" && snap["outcome"] != "unchanged" { return Err("Could not restore software Snap settings".into()); }
+                }
+            }
+            self.same_profile(active)?;
+            Ok(())
+        })();
+        Ok(match result {
+            Ok(()) => json!({"outcome":"applied","mutationAttempted":true,"after":hex(&data)}),
+            Err(error) => json!({"outcome":"uncertain","mutationAttempted":true,"error":error}),
         })
     }
     fn read_remaps(&mut self, request: Value) -> Result<Value, String> {
@@ -644,7 +699,17 @@ impl Keyboard {
                 json!({"activeProfileIndex":active,"brightnessChannels":[keys,ring],"gameModeEnabled":game==1,"fnLockEnabled":fn_lock==1})
             }
             "--version" => json!({"versionBytes":version,"devicePath":self.path}),
-            "--state" => self.state()?,
+            "--state" => self.state(None)?,
+            "--profile-state" => self.state(Some(crate::mutation::profile_slot(&edit.ok_or("Missing profile slot")?)?))?,
+            "--profile-lighting" => self.lighting(Some(crate::mutation::profile_slot(&edit.ok_or("Missing profile slot")?)?))?,
+            "--profile-snap" => {
+                let slot = crate::mutation::profile_slot(&edit.ok_or("Missing profile slot")?)?;
+                let active = self.profile_index()?;
+                if slot == 4 && active != 4 { return Err("Software Snap requires the active software profile".into()); }
+                let response = self.query(0x88, &[2, if slot == 4 {255} else {slot}])?;
+                self.same_profile(active)?;
+                json!({"activeProfileIndex":active,"profiles":[{"wireIndex":slot,"response":hex(&response)}]})
+            }
             "--snap" => {
                 let mut profiles = Vec::new();
                 let active = self.profile_index()?;
@@ -664,7 +729,7 @@ impl Keyboard {
                 let matrix = self.matrix(0xff)?;
                 json!({"keys":matrix.iter().map(|(id,adc)|json!({"sensorId":id,"adc":adc})).collect::<Vec<_>>()})
             }
-            "--lighting" => self.lighting()?,
+            "--lighting" => self.lighting(None)?,
             "--actuation" => self.actuation()?,
             "--apply-field" => {
                 self.change_field(change.ok_or("Missing validated setting request")?)?
@@ -685,6 +750,13 @@ impl Keyboard {
             "--apply-remap" => self.apply_remap(edit.ok_or("Missing remap edit")?)?,
             "--apply-remaps" => self.apply_remaps(edit.ok_or("Missing remap transaction")?)?,
             "--remaps" => self.read_remaps(edit.ok_or("Missing remap read request")?)?,
+            "--runtime-remaps" => {
+                let active = self.profile_index()?;
+                let data = self.runtime_remaps()?;
+                self.same_profile(active)?;
+                json!({"activeProfileIndex":active,"data":hex(&data)})
+            }
+            "--apply-runtime-remaps" => self.apply_runtime_remaps(edit.ok_or("Missing runtime mapping request")?)?,
             _ => return Err("Unsupported keyboard operation".into()),
         };
         let object = value.as_object_mut().ok_or("Invalid native response")?;

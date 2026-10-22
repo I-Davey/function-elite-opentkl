@@ -45,7 +45,7 @@ while (Date.now() - started < 35000) {
     if (belongsToLaunch) {
       runtime = current;
       if (runtime.status === 'failed') throw Error(String(runtime.error));
-      if (runtime.status === 'mounted' && (runtime.hardwareSync?.allProfilesRead || Date.now() - started > 30000)) break;
+      if (runtime.status === 'mounted' && runtime.applicationState?.phase === 'ready') break;
     }
   } catch (error) {
     if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
@@ -54,7 +54,7 @@ while (Date.now() - started < 35000) {
 }
 if (runtime?.status !== 'mounted') throw Error('The app did not mount; see ' + path.join(profile, 'runtime-report.json'));
 const result = { at: new Date().toISOString(), pid: runtime.pid, application, executable, dataRoot,
-  connected: !!runtime.hardwareSync?.allProfilesRead, hardwareSync: runtime.hardwareSync };
+  connected: !!runtime.applicationState?.device, hardwareSync: runtime.hardwareSync };
 fs.mkdirSync(path.dirname(receipt), { recursive: true });
 fs.writeFileSync(receipt, JSON.stringify(result, null, 2) + '\n');
 console.log(JSON.stringify(result));

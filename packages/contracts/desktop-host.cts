@@ -8,6 +8,11 @@ import type {
 
 /** Public desktop API: every invocation has a named request and response. */
 export interface KeyboardHost {
+  updateStatus(): Promise<import('./desktop-updates.cjs').UpdateState>;
+  checkForUpdates(): Promise<import('./desktop-updates.cjs').UpdateState>;
+  downloadUpdate(): Promise<import('./desktop-updates.cjs').UpdateState>;
+  installUpdate(): Promise<import('./desktop-updates.cjs').UpdateState>;
+  onUpdateState(callback: (state: import('./desktop-updates.cjs').UpdateState) => void): () => void;
   onNavigate(callback: (page: 'profiles' | 'analogue') => void): () => void;
   analogueState(): Promise<import('./desktop-analogue.cjs').AnalogueState>;
   analogueProfile(id: string): Promise<import('./desktop-analogue.cjs').AnalogueState>;
@@ -39,7 +44,7 @@ export interface KeyboardHost {
   applyProfile(input: C.ProfileInput): Promise<C.EditResult>;
   exportProfiles(): Promise<string | null>;
   importProfiles(): Promise<StoredProfiles | null>;
-  snap(): Promise<ReturnType<typeof import('../backend/src/snap.cjs').decode>>;
+  snap(activeOnly?: boolean): Promise<ReturnType<typeof import('../backend/src/snap.cjs').decode>>;
   applySnap(input: C.SnapInput): Promise<C.EditResult>;
   restoreSnap(backup: string): Promise<C.EditResult>;
   startMacroRecording(): Promise<boolean>;
@@ -69,7 +74,7 @@ export interface KeyboardHost {
   sensors(): Promise<
     ReturnType<typeof import('../backend/src/depth.cjs').decode> & { roundTripMs: number }
   >;
-  state(): Promise<
+  state(activeOnly?: boolean): Promise<
     ReturnType<typeof import('../backend/src/state.cjs').decode> & {
       lighting: ReturnType<typeof import('../backend/src/lighting.cjs').decode>;
       roundTripMs: number;

@@ -94,8 +94,8 @@ export const sensors = async (): Promise<C.SensorSnapshot> => {
     throw error;
   }
 };
-export const state = () => run('--state');
-export const lighting = () => run('--lighting');
+export const state = (wireIndex?: number) => wireIndex === undefined ? run('--state') : run('--profile-state', { wireIndex });
+export const lighting = (wireIndex?: number) => wireIndex === undefined ? run('--lighting') : run('--profile-lighting', { wireIndex });
 export const actuation = () => run('--actuation');
 export const applyField = (request: C.FieldRequest) => run('--apply-field', request);
 export const applyActuation = (request: C.ActuationRequest) => run('--apply-actuation', request);
@@ -109,10 +109,12 @@ export const stop = () => {
 
 export const applyRemap = (request: C.RemapRequest) => run('--apply-remap', request);
 export const applyRemaps = (requests: C.RemapRequest[]) => run('--apply-remaps', requests);
+export const runtimeRemaps = () => run('--runtime-remaps');
+export const applyRuntimeRemaps = (request: C.RuntimeRemapRequest) => run('--apply-runtime-remaps', request);
 
 export const executable = verifiedExecutable;
 
-export const snap = () => run('--snap');
+export const snap = (wireIndex?: number) => wireIndex === undefined ? run('--snap') : run('--profile-snap', { wireIndex });
 
 export const applySnap = (request: C.SnapRequest) => run('--apply-snap', request);
 

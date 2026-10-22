@@ -2,6 +2,13 @@
 //! Expected values prevent applying a stale editor snapshot to changed hardware.
 use serde_json::Value;
 
+pub fn profile_slot(value: &Value) -> Result<u8, String> {
+    if value.as_object().is_none_or(|row| row.len() != 1 || !row.contains_key("wireIndex")) {
+        return Err("Expected one profile slot".into());
+    }
+    value["wireIndex"].as_u64().filter(|slot| *slot < 5).map(|slot| slot as u8).ok_or("Invalid profile slot".into())
+}
+
 pub struct FieldChange {
     pub field: String,
     pub slot: u8,

@@ -11,6 +11,15 @@ const {
 const invoke = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
 const host: KeyboardHost = {
+  updateStatus: () => invoke('keyboard:update-status'),
+  checkForUpdates: () => invoke('keyboard:check-updates'),
+  downloadUpdate: () => invoke('keyboard:download-update'),
+  installUpdate: () => invoke('keyboard:install-update'),
+  onUpdateState: callback => {
+    const listener = (_event: IpcEvent, value: unknown) => callback(value as import('../../contracts/desktop-updates.cjs').UpdateState);
+    ipcRenderer.on('keyboard:update-state', listener);
+    return () => ipcRenderer.removeListener('keyboard:update-state', listener);
+  },
   onNavigate: (callback) => {
     const listener = (_event: IpcEvent, value: unknown) => {
       if (value === 'profiles' || value === 'analogue') callback(value);
@@ -72,7 +81,7 @@ const host: KeyboardHost = {
   applyProfile: (value) => invoke('keyboard:apply-profile', value),
   exportProfiles: () => invoke('keyboard:export-profiles'),
   importProfiles: () => invoke('keyboard:import-profiles'),
-  snap: () => invoke('keyboard:snap'),
+  snap: (activeOnly) => invoke('keyboard:snap', activeOnly),
   applySnap: (value) => invoke('keyboard:apply-snap', value),
   restoreSnap: (backup) => invoke('keyboard:restore-snap', backup),
   startMacroRecording: () => invoke('keyboard:record-macro-start'),
@@ -114,7 +123,7 @@ const host: KeyboardHost = {
   devices: () => invoke('keyboard:devices'),
   firmware: () => invoke('keyboard:firmware'),
   sensors: () => invoke('keyboard:sensors'),
-  state: () => invoke('keyboard:state'),
+  state: (activeOnly) => invoke('keyboard:state', activeOnly),
   actuation: () => invoke('keyboard:actuation'),
   report: (value) => ipcRenderer.send('keyboard:report', value),
   diagnostic: (value) => ipcRenderer.send('keyboard:diagnostic', value),

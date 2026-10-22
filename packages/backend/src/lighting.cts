@@ -271,7 +271,7 @@ function settings(record: C.WireLightingRecord, id: string): C.Effect {
   }
   throw Error('Unknown lighting effect tag ' + tag);
 }
-function decode(raw: C.LightingSnapshot) {
+function decode(raw: C.LightingSnapshot, activeOnly = false) {
   if (
     raw.status !== 'ok' ||
     raw.firmware !== '2.2.14' ||
@@ -284,7 +284,7 @@ function decode(raw: C.LightingSnapshot) {
     raw.activeProfileIndex < 0 ||
     raw.activeProfileIndex > 4 ||
     !Array.isArray(raw.profiles) ||
-    raw.profiles.length !== 5
+    raw.profiles.length !== (activeOnly ? 1 : 5)
   )
     throw Error('Incomplete lighting capture');
   const seen = new Set(),

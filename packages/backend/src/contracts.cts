@@ -117,6 +117,15 @@ export interface RemapRequest extends RemapRawInput {
   expectedActive: number;
   expectedData: string;
 }
+  export interface RuntimeRemaps { activeProfileIndex: number; devicePath?: string; data: string }
+  export interface RuntimeRemapRequest {
+    expectedActive: number;
+    expectedData: string;
+    data: string;
+    restore: boolean;
+    keys: SoftwareActuationRequest['keys'] | null;
+    snap: string | null;
+  }
 export type Repeat =
   { kind: 'WhilePressed' } | { kind: 'Infinite' } | { kind: 'Count'; nonZeroCount: number };
 export type Remap =
@@ -348,11 +357,11 @@ export interface CurrentSnapshot extends ReadMetadata {
   keys: { sensorId: number; adc: number }[];
 }
 export interface DeviceBackend {
-  state(): Promise<DeviceState>;
+    state(wireIndex?: number): Promise<DeviceState>;
   connection(): Promise<Connection>;
   actuation(): Promise<ActuationSnapshot>;
-  lighting(): Promise<LightingSnapshot>;
-  snap(): Promise<SnapSnapshot>;
+    lighting(wireIndex?: number): Promise<LightingSnapshot>;
+    snap(wireIndex?: number): Promise<SnapSnapshot>;
   remaps(request: RemapRead): Promise<RemapSnapshot>;
   applyField(request: FieldRequest): Promise<MutationResult<number>>;
   applyActuation(request: ActuationRequest): Promise<MutationResult<ActuationSnapshot>>;
@@ -370,6 +379,6 @@ export interface Backup<R, B> {
   snapJournal?: string;
 }
 export interface Layout {
-  sensors: Record<string, { physicalKeyId: number; label: string }>;
+    sensors: Record<string, { physicalKeyId: number; canonicalKey: number; label: string }>;
   rows: { sensorId?: number; code?: number }[][];
 }

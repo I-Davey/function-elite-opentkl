@@ -15,11 +15,18 @@ export function createProfileSync(
   requestedHardwareId: string | null,
 ): ProfileSync {
   const { keyboard, remap, device, host, state } = context;
-  const brightnessBySlot=new Map<number,number[]>();
+  const loadedSlots = new Set<number>();
+  let cacheGeneration = state.getSnapshot().connectionGeneration;
+  keyboard.addHardwareProfiles([0,1,2,3].filter(slot => !keyboard.hardwareProfiles.some(profile => profile.hardwareProfileId === slot)).map(slot =>
+    HardwareKeyboardProfile.create({ id: 'hardware-' + slot, hardwareProfileId: slot,
+      name: i18n.t('keyboard:onboardProfile', { profileNumber: slot + 1 }),
+      settings: getSnapshot(createDefaultKeyboardProfile(device).settings) })));
   // The shared state owns the DOM lock too: an old read cannot unlock its replacement.
   const mirrorHydration = (): void => {
     const workspace = document.getElementById('keyboard-workspace');
-    if (state.getSnapshot().hydrationDepth > 0) {
+    const selected = keyboard.activeProfile.hardwareProfileId;
+    const loading = selected !== undefined && !loadedSlots.has(selected) && state.getSnapshot().phase !== 'disconnected';
+    if (state.getSnapshot().hydrationDepth > 0 || loading) {
       workspace?.setAttribute('inert', '');
       workspace?.setAttribute('aria-busy', 'true');
     } else {
@@ -31,17 +38,6 @@ export function createProfileSync(
   async function syncHardwareProfiles(
     ownerTicket?: StateTicket,
   ): Promise<HardwareSync> {
-    // Our verified selection changes the active slot, not its cached settings.
-    if (ownerTicket && state.getSnapshot().allProfilesLoaded && context.diagnostics.hardwareSync) {
-      const connection = await host.connection();
-      state.assertCurrent(ownerTicket);
-      if (connection.activeProfileIndex !== keyboard.activeProfile.hardwareProfileId)
-        throw Error('Keyboard profile changed during selection; refresh');
-      syncLiveValues(connection, ownerTicket);
-      const summary = { ...context.diagnostics.hardwareSync, activeWireSlot: connection.activeProfileIndex };
-      context.diagnostics.hardwareSync = summary;
-      return summary;
-    }
     if (
       state.getSnapshot().phase === 'disconnected' ||
       state.getSnapshot().phase === 'error'
@@ -61,6 +57,23 @@ export function createProfileSync(
         throw error;
       }
     }
+    const generation = state.getSnapshot().connectionGeneration;
+    if (generation !== cacheGeneration) { loadedSlots.clear(); cacheGeneration = generation; }
+    const connection = await host.connection();
+    if (ownerTicket) state.assertCurrent(ownerTicket);
+    if (ownerTicket && connection.activeProfileIndex !== keyboard.activeProfile.hardwareProfileId)
+      throw Error('Keyboard profile changed during selection; refresh');
+    if (loadedSlots.has(connection.activeProfileIndex) && context.diagnostics.hardwareSync) {
+      const hydration = state.beginHydration(ownerTicket);
+      try {
+        hydration.commit(() => keyboard.setActiveProfileId('hardware-' + connection.activeProfileIndex, { fromDevice: true }));
+        syncLiveValues(connection, ownerTicket);
+      } finally { hydration.close(); }
+      state.selectProfile({ kind: 'onboard', wireIndex: connection.activeProfileIndex });
+      const summary = { ...context.diagnostics.hardwareSync, activeWireSlot: connection.activeProfileIndex };
+      context.diagnostics.hardwareSync = summary;
+      return summary;
+    }
     const scope = state.beginHydration(ownerTicket);
     const workspace = document.getElementById('keyboard-workspace');
     workspace?.setAttribute('inert', '');
@@ -68,32 +81,15 @@ export function createProfileSync(
     let activeSlot: number | null = null;
     let summary: HardwareSync | undefined;
     try {
-      if (!state.getSnapshot().allProfilesLoaded) {
-        context.setStatusLabel('Reading all onboard profiles…');
-        const all = await host.allProfileConfigs();
-        if (all.profiles.length !== 4 || !all.returnedToOriginalSlot)
-          throw Error('Incomplete onboard profile read');
-        scope.commit(() => {
-          for (const profile of all.profiles) {
-            brightnessBySlot.set(profile.wireIndex,profile.brightnessChannels);
-            for (const { key, active } of profile.remaps.configs)
-              remap.addHardwareKeyRemapSetting(
-                { kind: 'Hardware', id: profile.wireIndex },
-                key,
-                active,
-              );
-          }
-          state.markHardwareProfilesLoaded(scope.ticket);
-        });
-      }
-      const snapshot = await host.state();
+      context.setStatusLabel('Loading selected onboard profile…');
+      const snapshot = await host.state(true);
       const actuation = await host.actuation();
       if (snapshot.activeProfile.wireIndex !== actuation.activeProfileIndex)
         throw Error('Keyboard profile changed during synchronization; refresh');
       const nativeRemaps = await host.remaps(actuation.activeProfileIndex);
       if (nativeRemaps.activeProfileIndex !== actuation.activeProfileIndex)
         throw Error('Profile changed while loading remaps');
-      const snapProfiles = await host.snap();
+      const snapProfiles = await host.snap(true);
       summary = scope.commit(() => {
         for (const { key, active } of nativeRemaps.configs)
           remap.addHardwareKeyRemapSetting(
@@ -106,15 +102,15 @@ export function createProfileSync(
         );
         if (!target || actuation.actuations.length !== 88)
           throw Error('Incomplete keyboard actuation model');
-        remap.resetHardwareSnapOverrides();
-        for (const profile of snapProfiles)
+        remap.resetHardwareSnapOverrides(actuation.activeProfileIndex);
+        for (const profile of snapProfiles.filter(profile => profile.wireIndex === actuation.activeProfileIndex))
           for (const config of profile.configs)
             remap.addHardwareSnapOverride(
               { kind: 'Hardware', id: profile.wireIndex },
               config,
             );
         const profiles: HardwareProfileModel[] = snapshot.profiles
-          .filter((profile) => profile.kind === 'Hardware')
+          .filter((profile) => profile.kind === 'Hardware' && profile.wireIndex === actuation.activeProfileIndex)
           .map((profile) => {
             const lighting = snapshot.lighting.profiles.find(
               (layer) => layer.wireIndex === profile.wireIndex,
@@ -130,8 +126,8 @@ export function createProfileSync(
                 name: i18n.t('keyboard:onboardProfile', {
                   profileNumber: profile.id + 1,
                 }),
-                keyBrightness:(brightnessBySlot.get(profile.wireIndex)?.[0]??80)/100,
-                perimeterBrightness:(brightnessBySlot.get(profile.wireIndex)?.[1]??80)/100,
+                keyBrightness:snapshot.brightnessKeys,
+                perimeterBrightness:snapshot.brightnessRing,
                 settings: {
                   ...settings,
                   pollingRate: profile.pollingRate,
@@ -163,18 +159,20 @@ export function createProfileSync(
           } else throw Error('HE physical keys require configurable actuation');
         }
         keyboard.addHardwareProfiles(profiles);
+        loadedSlots.add(actuation.activeProfileIndex);
+        if (loadedSlots.size === 4) state.markHardwareProfilesLoaded(scope.ticket);
         context.diagnostics.deviceState = snapshot;
         context.diagnostics.nativeActuation = actuation;
         context.diagnostics.nativeRemaps = nativeRemaps;
         const value: HardwareSync = {
           source: 'Rust',
-          hardwareProfiles: profiles.length,
+          hardwareProfiles: loadedSlots.size,
           actuationKeys: actuation.actuations.length,
           activeWireSlot: actuation.activeProfileIndex,
           completeProfile: false,
           completeActiveProfile: true,
-          inactiveActuationSource: 'device-read-on-connect',
-          allProfilesRead: true,
+          inactiveActuationSource: 'read-on-selection',
+          allProfilesRead: loadedSlots.size === 4,
           deviceSettingsLinked: context.deviceControls !== null,
           remapRecords: nativeRemaps.records.length,
         };
@@ -255,7 +253,8 @@ export function createProfileSync(
   return {
     syncHardwareProfiles,
     syncLiveValues,
-    invalidateHardwareCache: () => state.invalidateHardwareCache(),
+    isHardwareProfileLoaded: (slot: number) => loadedSlots.has(slot),
+    invalidateHardwareCache: (slot?: number) => { if (slot === undefined) loadedSlots.clear(); else loadedSlots.delete(slot); state.invalidateHardwareCache(); },
     dispose: disposeHydration,
   };
 }

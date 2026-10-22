@@ -3,7 +3,7 @@ import { required } from './validation.cjs';
 
 const rates = ['Hz8000', 'Hz4000', 'Hz2000', 'Hz1000', 'Hz500', 'Hz250', 'Hz125'];
 /** Decode only verified fields. Lighting effects, remaps and HE words are absent. */
-export const decode = (raw: C.DeviceState) => {
+export const decode = (raw: C.DeviceState, activeOnly = false) => {
   if (
     raw.status !== 'ok' ||
     raw.firmware !== '2.2.14' ||
@@ -19,7 +19,7 @@ export const decode = (raw: C.DeviceState) => {
   if (!Array.isArray(raw.brightnessChannels) || raw.brightnessChannels.length !== 2)
     throw Error('Missing brightness channels');
   const brightness = raw.brightnessChannels.map((v) => integer(v, 0, 100, 'brightness') / 100);
-  if (!Array.isArray(raw.profiles) || raw.profiles.length !== 5)
+  if (!Array.isArray(raw.profiles) || raw.profiles.length !== (activeOnly ? 1 : 5))
     throw Error('Incomplete profile metadata');
   const seen = new Set(),
     profiles = raw.profiles

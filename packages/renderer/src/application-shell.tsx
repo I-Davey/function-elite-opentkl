@@ -5,6 +5,8 @@ import { ProfilesPage, ProfileToolbar } from './profiles-page.js';
 import { keyboardRoutes } from '../../keyboard-ui/src/keyboardRoutes.js';
 import { errorMessage } from '../../contracts/desktop.cjs';
 import type { RendererContext } from './context.js';
+import { UpdateControls } from './update-controls.js';
+import { flushAnalogueChanges } from './analogue-controls.js';
 
 export interface WorkspaceAction {
   id: 'rescan' | 'onboard' | 'undo' | 'restore' | 'export' | 'import';
@@ -104,7 +106,7 @@ export const ApplicationShell = observer(function ApplicationShell({
     setNotice(null);
     try {
       const result = await action.run();
-      if (result !== null) setNotice({ message: action.complete, error: false });
+      if (result !== null) setNotice({ message: action.id === 'export' && typeof result === 'string' ? 'Exported to ' + result : action.complete, error: false });
     } catch (error) {
       setNotice({ message: errorMessage(error), error: true });
     } finally {
@@ -183,6 +185,12 @@ export const ApplicationShell = observer(function ApplicationShell({
               ) : children}
             </div>
           </div>
+          <UpdateControls host={context.host} beforeInstall={async () => {
+            await flushAnalogueChanges();
+            context.api.save();
+            await context.api.flushSave();
+            await context.deviceControls?.flush();
+          }} />
           <footer className="app-statusbar" aria-live="polite">
             <span className={'connection-dot ' + (connected ? 'is-connected' : '')} />
             <span className="offline-label">{ui.status}</span>

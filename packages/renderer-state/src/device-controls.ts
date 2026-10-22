@@ -72,6 +72,7 @@ export interface ControlModelPort {
     effect: (next: ControlSnapshot, previous: ControlSnapshot | undefined) => void,
   ): () => void;
   syncHardwareProfiles(ownerTicket?: StateTicket): Promise<unknown>;
+  invalidateHardwareCache?(slot?: number): void;
   syncLiveValues(value: LiveControls): void;
   depthActive(): boolean;
   activeWireSlot(): number;
@@ -357,6 +358,7 @@ export function createDeviceControls(context: DeviceControlsContext): DeviceCont
         last = null;
         lastTicket = null;
         state.finishRecovery(recovery);
+        model.invalidateHardwareCache?.(model.activeWireSlot());
         await model.syncHardwareProfiles();
         label('Previous device setting restored and verified');
         report();

@@ -31,6 +31,7 @@ import * as lightingModule from '../../../backend/src/lighting.cjs';
 import * as profileStoreModule from './profile-store.cjs';
 import { parseLibrary, profileId } from '../../../contracts/desktop-profiles.cjs';
 import { applications } from './applications.cjs';
+import { exportJson } from './export-json.cjs';
 ('use strict');
 import fs from 'node:fs';
 import path from 'node:path';
@@ -137,18 +138,7 @@ export function registerKeyboardIpc({
       return restore(profile, backup);
     }),
   );
-  handle('keyboard:export-profiles', async () => {
-    const { dialog }: Pick<Electron, 'dialog'> = require('electron');
-    const selected = await dialog.showSaveDialog(win, {
-      title: 'Export keyboard profiles',
-      defaultPath: path.join(profile, 'keyboard-profiles.json'),
-      filters: [{ name: 'Keyboard profiles', extensions: ['json'] }],
-    });
-    if (selected.canceled) return null;
-    if (!selected.filePath) throw Error('Export path unavailable');
-    fs.writeFileSync(selected.filePath, JSON.stringify(store.read(), null, 2));
-    return selected.filePath;
-  });
+  handle('keyboard:export-profiles', () => exportJson('keyboard-profiles', store.read()));
   handle('keyboard:import-profiles', async () => {
     const { dialog }: Pick<Electron, 'dialog'> = require('electron');
     const selected = await dialog.showOpenDialog(win, {
@@ -170,7 +160,11 @@ export function registerKeyboardIpc({
     return connection;
     });
   });
-  handle('keyboard:snap', () => serial(async () => snapModule.decode(await devicesModule.snap())));
+  handle('keyboard:snap', (_event, activeOnly) => serial(async () => {
+    if (activeOnly !== undefined && typeof activeOnly !== 'boolean') throw Error('Invalid profile read scope');
+    const slot = activeOnly ? (await devicesModule.connection()).activeProfileIndex : undefined;
+    return snapModule.decode(await devicesModule.snap(slot));
+  }));
   handle('keyboard:apply-snap', (_event, input) =>
     configure(() => settingsModule.applySnap(profile, request.snapEdit(input))),
   );
@@ -255,16 +249,19 @@ export function registerKeyboardIpc({
       return { ...result, source: 'direct-hid', backup: 'hardware-state/' + backup };
     }),
   );
-  handle('keyboard:state', () =>
+  handle('keyboard:state', (_event, activeOnly) =>
     serial(async () => {
+      if (activeOnly !== undefined && typeof activeOnly !== 'boolean') throw Error('Invalid profile read scope');
+      const slot = activeOnly ? (await devicesModule.connection()).activeProfileIndex : undefined;
       const started = Date.now(),
         backend = devicesModule,
-        raw = await backend.state(),
-        decoded = stateModule.decode(raw);
-      const rawLighting = await backend.lighting(),
-        lighting = lightingModule.decode(rawLighting);
+        raw = await backend.state(slot),
+        decoded = stateModule.decode(raw, !!activeOnly);
+      const rawLighting = await backend.lighting(slot),
+        lighting = lightingModule.decode(rawLighting, !!activeOnly);
       if (lighting.activeProfileIndex !== decoded.activeProfile.wireIndex)
         throw Error('Keyboard profile changed between metadata and lighting reads; retry');
+      if (activeOnly) return { ...decoded, lighting, roundTripMs: Date.now() - started, backup: '' };
       const directory = path.join(profile, 'hardware-state');
       fs.mkdirSync(directory, { recursive: true });
       const backup = 'state-' + new Date().toISOString().replaceAll(':', '-') + '.json';

@@ -3,7 +3,6 @@ import { asError, required, readJson } from './validation.cjs';
 import * as transaction_journalModule from './transaction-journal.cjs';
 import * as lightingModule from './lighting.cjs';
 import * as deviceBackend from './devices.cjs';
-import * as profileReader from './profile-reader.cjs';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,22 +22,14 @@ async function applyLightingRaw(
   )
     throw Error('Invalid lighting transaction');
   lightingModule.records(input.data, input.layer);
-  let before = await backend.lighting();
+  const before = await backend.lighting(input.wireIndex);
   const selectedLayer = (snapshot: C.LightingSnapshot) =>
     required(
       required(snapshot.profiles.find((p) => p.wireIndex === input.wireIndex)).layers.find(
         (l) => l.kind === input.layer,
       ),
     );
-  try {
-    lightingModule.records(selectedLayer(before).data, input.layer);
-  } catch (error) {
-    if (before.activeProfileIndex === 4) throw error;
-    // Reload stored onboard tables when transient firmware RAM cannot be decoded.
-    await profileReader.read(profile, backend);
-    before = await backend.lighting();
-    lightingModule.records(selectedLayer(before).data, input.layer);
-  }
+  lightingModule.records(selectedLayer(before).data, input.layer);
   const layer = selectedLayer(before);
   const request = {
     wireIndex: input.wireIndex,
@@ -69,10 +60,7 @@ async function applyLightingRaw(
     throw Error(error.message + '; saved backup: ' + backup);
   }
   if (result.outcome === 'uncertain') {
-    const current = await backend.connection();
-    if (current.activeProfileIndex === request.expectedActive && current.activeProfileIndex < 4)
-      await profileReader.read(profile, backend);
-    const observed = await backend.lighting(),
+    const observed = await backend.lighting(input.wireIndex),
       data = required(
         required(observed.profiles.find((p) => p.wireIndex === input.wireIndex)).layers.find(
           (l) => l.kind === input.layer,

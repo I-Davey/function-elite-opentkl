@@ -90,6 +90,7 @@ export async function createDeviceLifecycle({
   };
   if (
     fs.existsSync(path.join(profile, 'analogue-session.json')) ||
+    fs.existsSync(path.join(profile, 'analogue-runtime-session.json')) ||
     fs.existsSync(path.join(profile, 'analogue-lighting-session.json')) ||
     fs.existsSync(path.join(profile, 'hardware-read-session.json')) ||
     fs.existsSync(path.join(profile, 'software-session.json'))

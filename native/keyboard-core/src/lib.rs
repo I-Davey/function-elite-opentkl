@@ -22,6 +22,9 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
         "--sensors",
         "--current",
         "--state",
+        "--profile-state",
+        "--profile-lighting",
+        "--profile-snap",
         "--snap",
         "--lighting",
         "--actuation",
@@ -32,6 +35,8 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
         "--remaps",
         "--apply-remap",
         "--apply-remaps",
+        "--runtime-remaps",
+        "--apply-runtime-remaps",
         "--apply-snap",
         "--apply-software-actuation",
     ]
@@ -52,8 +57,10 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
             && mode != "--remaps"
             && mode != "--apply-remap"
             && mode != "--apply-remaps"
+            && mode != "--apply-runtime-remaps"
             && mode != "--apply-snap"
             && mode != "--apply-software-actuation"
+            && !["--profile-state", "--profile-lighting", "--profile-snap"].contains(&mode)
         {
             return Err("Unexpected operation arguments".into());
         }
@@ -66,18 +73,26 @@ pub fn execute(arguments: &[String]) -> Result<serde_json::Value, String> {
         "--remaps",
         "--apply-remap",
         "--apply-remaps",
+        "--apply-runtime-remaps",
         "--apply-snap",
         "--apply-software-actuation",
+        "--profile-state",
+        "--profile-lighting",
+        "--profile-snap",
     ]
     .contains(&mode)
     {
         let value: serde_json::Value =
             serde_json::from_str(arguments.get(1).ok_or("Missing device request")?)
                 .map_err(|e| e.to_string())?;
-        if mode == "--apply-software-actuation" {
+        if ["--profile-state", "--profile-lighting", "--profile-snap"].contains(&mode) {
+            mutation::profile_slot(&value)?;
+        } else if mode == "--apply-software-actuation" {
             actuation::validate_software(&value)?;
         } else if mode == "--apply-snap" {
             snap::validate(&value)?;
+        } else if mode == "--apply-runtime-remaps" {
+            remap::validate_runtime(&value)?;
         } else if mode == "--apply-remaps" {
             remap::validate_batch(&value)?;
         } else if mode == "--apply-remap" {
@@ -134,18 +149,19 @@ pub struct DeviceSession {
 }
 impl DeviceSession {
     pub fn execute(&mut self, arguments: &[String]) -> Result<serde_json::Value, String> {
-        let edit_mode = arguments.len() == 2 && ["--apply-runtime-lighting", "--remaps", "--apply-remap", "--apply-remaps"].contains(&arguments[0].as_str());
+        let edit_mode = arguments.len() == 2 && ["--apply-runtime-lighting", "--remaps", "--apply-remap", "--apply-remaps", "--apply-runtime-remaps"].contains(&arguments[0].as_str());
         let edit = if edit_mode {
             let value: serde_json::Value = serde_json::from_str(&arguments[1]).map_err(|e| e.to_string())?;
             match arguments[0].as_str() {
                 "--remaps" => remap::validate_read(&value)?,
                 "--apply-remap" => remap::validate_edit(&value)?,
                 "--apply-remaps" => remap::validate_batch(&value)?,
+                "--apply-runtime-remaps" => remap::validate_runtime(&value)?,
                 _ => lighting::validate_runtime(&value)?,
             }
             Some(value)
         } else { None };
-        let fast = edit_mode || (arguments.len() == 1 && ["--sensors", "--current", "--connection"].contains(&arguments[0].as_str()));
+        let fast = edit_mode || (arguments.len() == 1 && ["--sensors", "--current", "--connection", "--runtime-remaps"].contains(&arguments[0].as_str()));
         let result = if fast {
             if let Some(path) = self.cached_path.as_deref() {
                 (|| {

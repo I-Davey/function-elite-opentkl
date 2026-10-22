@@ -39,8 +39,14 @@ export function createProfiles(context: RendererContext, initial: ProfileLibrary
     if (!settings || settings.physicalKeys.size < 88) throw Error('Read the complete keyboard profile first');
     return settings;
   };
+  const loadOnboard = async (id: string) => {
+    const source = find(id);
+    if (source.hardwareProfileId !== undefined && !context.api.isHardwareProfileLoaded(source.hardwareProfileId))
+      await select(id, 'Load selected onboard profile');
+  };
   const duplicate = async (sourceId?:string) => {
     await flushAnalogueChanges();
+    if (sourceId) await loadOnboard(sourceId);
     const id=v4(), source=sourceId ? find(sourceId) : undefined;
     if (sourceId) mapping(sourceId);
     // Copy host-owned settings first, so selection can never see an empty analogue profile.
@@ -51,6 +57,7 @@ export function createProfiles(context: RendererContext, initial: ProfileLibrary
     await select(id); return id;
   };
   const copySections = async (sourceId:string,targetId:string,sections:ProfileSection[]) => {
+    await loadOnboard(sourceId);
     if (sourceId === targetId) return;
     await flushAnalogueChanges(); await state.flush();
     const source=find(sourceId), target=find(targetId);
@@ -85,6 +92,8 @@ export function createProfiles(context: RendererContext, initial: ProfileLibrary
   };
   const replaceOnboard = async (sourceId:string,slot:number) => {
     const source=find(sourceId); if (source.hardwareProfileId !== undefined) throw Error('Choose a software profile');
+    const current=keyboard.activeProfile.id;
+    await loadOnboard(`hardware-${slot}`);
     const target=find(`hardware-${slot}`);
     await flushAnalogueChanges(); await state.flush();
     const oldSettings=getSnapshot(target.settings),oldMappings=getSnapshot(mapping(target.id));
@@ -93,9 +102,8 @@ export function createProfiles(context: RendererContext, initial: ProfileLibrary
     await host.copyAnalogueProfile(target.id,backupId);
     keyboard.addSoftwareProfile(KeyboardProfile.create({id:backupId,name:`${target.name || `Onboard ${slot+1}`} backup`,settings:getSnapshot(target.settings),keyBrightness:target.keyBrightness,perimeterBrightness:target.perimeterBrightness}),{id:target.id,hardwareProfileId:slot});
     await context.api.flushSave();
-    const current=keyboard.activeProfile.id;
     const scope=state.beginHydration();
-    try { scope.commit(() => { keyboard.setActiveProfileId(sourceId,{fromDevice:true}); keyboard.copyCurrentProfileToHardware(slot,false); keyboard.setActiveProfileId(current,{fromDevice:true}); }); }
+    try { scope.commit(() => { keyboard.setActiveProfileId(sourceId,{fromDevice:true}); keyboard.copyCurrentProfileToHardware(slot,false); keyboard.setActiveProfileId(target.id,{fromDevice:true}); }); }
     finally { scope.close(); }
     const profile = (await import('./control-model-adapter.js')).captureControlSnapshot(context).hardware.find(profile=>profile.wireIndex===slot);
     if (!profile) throw Error('Onboard replacement unavailable');
@@ -109,6 +117,7 @@ export function createProfiles(context: RendererContext, initial: ProfileLibrary
       throw error;
     }
     context.api.save(); await context.api.flushSave();
+    if (keyboard.activeProfile.id !== current) await select(current, 'Return after onboard replacement');
   };
   const associate = (id:string,app:AppAssociation) => {
     if (find(id).isHardwareProfile) throw Error('Link applications to a software profile');

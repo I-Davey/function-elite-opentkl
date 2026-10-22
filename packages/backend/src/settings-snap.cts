@@ -23,7 +23,7 @@ async function applySnapRaw(
     !/^[0-9a-f]{30}$/.test(input.data)
   )
     throw Error('Invalid snap edit');
-  const before = await backend.snap(),
+  const before = await backend.snap(input.wireIndex),
     old = snapModule.decode(before).find((p) => p.wireIndex === input.wireIndex);
   const request = {
     ...input,

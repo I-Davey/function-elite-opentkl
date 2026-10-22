@@ -28,7 +28,7 @@ export async function restoreAnalogueLighting(profile: string): Promise<void> {
   if (typeof raw.reactiveApplied === 'string') lighting.records(raw.reactiveApplied, 'Reactive');
   const current = await devices.connection();
   if (current.devicePath !== raw.devicePath) throw Error('Reconnect the keyboard used for analogue lighting');
-  const snapshot = await devices.lighting(), layers = snapshot.profiles.find(p => p.wireIndex === raw.wireIndex)?.layers;
+  const snapshot = await devices.lighting(Number(raw.wireIndex)), layers = snapshot.profiles.find(p => p.wireIndex === raw.wireIndex)?.layers;
   if (!layers || snapshot.activeProfileIndex !== current.activeProfileIndex) throw Error('Keyboard changed during lighting recovery');
   const reactive = layers.find(l => l.kind === 'Reactive')!.data;
   // Older journals only attempted a rejected FF reactive write, so their stored layer is untouched.
@@ -59,7 +59,7 @@ export function createAnalogueFeedback(profile: string) {
       const currentMode = JSON.stringify([overridden, pending]);
       if (now - lastAt < 100 && currentMode === lastMode) return;
       if (!session) {
-        const connection = await devices.connection(), raw = await devices.lighting();
+        const connection = await devices.connection(), raw = await devices.lighting(connection.activeProfileIndex);
         if (!connection.devicePath || raw.activeProfileIndex !== connection.activeProfileIndex) throw Error('Keyboard changed before lighting feedback');
         const layers = raw.profiles.find(p => p.wireIndex === raw.activeProfileIndex)?.layers;
         if (!layers) throw Error('Lighting backup is unavailable');

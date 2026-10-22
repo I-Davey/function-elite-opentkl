@@ -189,7 +189,7 @@ function setup(slot = 2) {
       calls.push('all');
       return all;
     },
-    state: async () => snapshot,
+    state: async activeOnly => { assert.equal(activeOnly, true); calls.push('selected'); return snapshot; },
     actuation: async () => actuation,
     remaps: async () => nativeRemaps,
     snap: async () =>
@@ -282,11 +282,11 @@ test('macro default name resolves after translation initialization and at creati
   } finally { await i18n.changeLanguage('en'); }
 });
 
-test('renderer hydrates four profiles, actuation and lighting without outbound writes and caches the read', async () => {
+test('renderer loads only the selected profile and reuses it without outbound writes', async () => {
   const f = setup();
   try {
     const result = await f.sync.syncHardwareProfiles();
-    assert.equal(result.hardwareProfiles, 4);
+    assert.equal(result.hardwareProfiles, 1);
     assert.equal(result.actuationKeys, 88);
     assert.equal(f.context.keyboard.hardwareProfiles.length, 4);
     assert.deepEqual(
@@ -301,14 +301,16 @@ test('renderer hydrates four profiles, actuation and lighting without outbound w
     assert.equal(key.active.actuation.isRapidTrigger, true);
     assert.equal(key.active.actuation.rapidSensitivity, 3);
     assert.deepEqual(f.state.getSnapshot().selection, { kind: 'onboard', wireIndex: 2 });
-    assert.equal(f.state.getSnapshot().allProfilesLoaded, true);
+    assert.equal(f.state.getSnapshot().allProfilesLoaded, false);
+    assert.equal(f.sync.isHardwareProfileLoaded(2), true);
+    assert.equal(f.sync.isHardwareProfileLoaded(0), false);
     assert.equal(f.state.getSnapshot().hydrationDepth, 0);
     assert.equal(f.workspace.size, 0);
     await f.controls.flush();
-    assert.deepEqual(f.calls, ['all']);
+    assert.deepEqual(f.calls, ['selected']);
     await f.sync.syncHardwareProfiles();
     await f.controls.flush();
-    assert.deepEqual(f.calls, ['all']);
+    assert.deepEqual(f.calls, ['selected']);
   } finally {
     f.close();
   }
@@ -328,7 +330,7 @@ test('live brightness, game mode and Fn lock mirror through hydration without ec
     assert.equal(f.context.keyboard.activeProfile.settings.fnLockEnabled, false);
     assert.equal(f.context.keyboard.activeProfile.settings.gameModeEnabled, false);
     await f.controls.flush();
-    assert.deepEqual(f.calls, ['all']);
+    assert.deepEqual(f.calls, ['selected']);
     assert.equal(f.state.getSnapshot().phase, 'ready');
   } finally {
     f.close();
@@ -347,12 +349,12 @@ test('verified onboard selections reuse models without rereading remaps or resto
     assert.equal(f.workspace.size, 0);
   } finally { f.close(); }
 });
-test('selection change rejects an outstanding all-profile reply before any model mutation', async () => {
+test('selection change rejects an outstanding selected-profile reply before any model mutation', async () => {
   const f = setup();
   try {
     const gate = deferred(),
       entered = deferred();
-    f.host.allProfileConfigs = () => {
+    f.host.state = () => {
       entered.resolve();
       return gate.promise;
     };
@@ -361,12 +363,12 @@ test('selection change rejects an outstanding all-profile reply before any model
     const count = f.notifications;
     f.state.selectProfile({ kind: 'onboard', wireIndex: 3 });
     const rejected = assert.rejects(pending, /connection or profile changed/);
-    gate.resolve(f.all);
+    gate.resolve(f.snapshot);
     await rejected;
     assert.equal(f.notifications, count);
     assert.equal(f.state.getSnapshot().allProfilesLoaded, false);
     assert.deepEqual(f.state.getSnapshot().selection, { kind: 'onboard', wireIndex: 3 });
-    assert.equal(f.workspace.size, 0);
+    assert.equal(f.workspace.has('inert'), true, 'An unloaded replacement profile stays locked');
   } finally {
     f.close();
   }
@@ -402,15 +404,15 @@ test('mixed active-profile reads reject without applying profile or brightness u
   try {
     f.actuation.activeProfileIndex = 1;
     await assert.rejects(f.sync.syncHardwareProfiles(), /profile changed during synchronization/);
-    assert.equal(f.context.keyboard.hardwareProfiles.length, 1);
+    assert.equal(f.context.keyboard.hardwareProfiles.length, 4);
     assert.equal(f.context.keyboard.keyBrightness, 1);
     assert.equal(f.state.getSnapshot().hydrationDepth, 0);
-    assert.equal(f.workspace.size, 0);
+    assert.equal(f.workspace.has('inert'), true, 'Unknown profile contents must not become editable');
   } finally {
     f.close();
   }
 });
-test('reconnect invalidates the four-slot cache and reloads it once', async () => {
+test('reconnect invalidates cached device contents and reloads only the selected slot', async () => {
   const f = setup();
   try {
     await f.sync.syncHardwareProfiles();
@@ -418,8 +420,8 @@ test('reconnect invalidates the four-slot cache and reloads it once', async () =
     const ticket = f.state.beginConnection();
     f.state.connected({ id: 'reconnected' }, ticket);
     await f.sync.syncHardwareProfiles();
-    assert.deepEqual(f.calls, ['all', 'all']);
-    assert.equal(f.state.getSnapshot().allProfilesLoaded, true);
+    assert.deepEqual(f.calls, ['selected', 'selected']);
+    assert.equal(f.state.getSnapshot().allProfilesLoaded, false);
   } finally {
     f.close();
   }

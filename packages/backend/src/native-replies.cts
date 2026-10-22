@@ -6,6 +6,9 @@ export interface Replies {
   '--version': Record<string, unknown>;
   '--connection': C.Connection;
   '--state': C.DeviceState;
+  '--profile-state': C.DeviceState;
+  '--profile-lighting': C.LightingSnapshot;
+  '--profile-snap': C.SnapSnapshot;
   '--sensors': C.SensorSnapshot;
   '--current': C.CurrentSnapshot;
   '--actuation': C.ActuationSnapshot;
@@ -18,6 +21,8 @@ export interface Replies {
   '--apply-runtime-lighting': C.MutationResult;
   '--apply-remap': C.MutationResult<C.RemapRecord>;
   '--apply-remaps': C.MutationResult;
+  '--runtime-remaps': C.RuntimeRemaps;
+  '--apply-runtime-remaps': C.MutationResult<string>;
   '--apply-snap': C.MutationResult<string>;
   '--apply-software-actuation': C.MutationResult;
 }
@@ -77,14 +82,14 @@ function remap(v: unknown): boolean {
     hex(v.data)
   );
 }
-function state(v: Record<string, unknown>) {
+function state(v: Record<string, unknown>, count = 5) {
   return (
     slot(v.activeProfileIndex) &&
     array(v.brightnessChannels) &&
     v.brightnessChannels.length === 2 &&
     v.brightnessChannels.every((x) => integer(x, 0, 100)) &&
     array(v.profiles) &&
-    v.profiles.length === 5 &&
+    v.profiles.length === count &&
     v.profiles.every(
       (p) =>
         object(p) &&
@@ -99,6 +104,8 @@ function state(v: Record<string, unknown>) {
 }
 function read(mode: Operation, v: Record<string, unknown>): boolean {
   switch (mode) {
+    case '--runtime-remaps':
+      return metadata(v) && slot(v.activeProfileIndex) && typeof v.devicePath === 'string' && hex(v.data) && v.data.length <= 4096;
     case '--connection':
       return (
         metadata(v) &&
@@ -111,6 +118,8 @@ function read(mode: Operation, v: Record<string, unknown>): boolean {
       );
     case '--state':
       return metadata(v) && state(v);
+    case '--profile-state':
+      return metadata(v) && state(v, 1);
     case '--actuation':
       return metadata(v) && actuation(v);
     case '--remaps':
@@ -127,12 +136,13 @@ function read(mode: Operation, v: Record<string, unknown>): boolean {
             integer(record.status, 1, 2),
         )
       );
+    case '--profile-lighting':
     case '--lighting':
       return (
         metadata(v) &&
         slot(v.activeProfileIndex) &&
         array(v.profiles) &&
-        v.profiles.length === 5 &&
+        v.profiles.length === (mode === '--profile-lighting' ? 1 : 5) &&
         v.profiles.every(
           (p) =>
             object(p) &&
@@ -149,12 +159,13 @@ function read(mode: Operation, v: Record<string, unknown>): boolean {
             ),
         )
       );
+    case '--profile-snap':
     case '--snap':
       return (
         metadata(v) &&
         slot(v.activeProfileIndex) &&
         array(v.profiles) &&
-        v.profiles.length === (v.activeProfileIndex === 4 ? 5 : 4) &&
+        v.profiles.length === (mode === '--profile-snap' ? 1 : v.activeProfileIndex === 4 ? 5 : 4) &&
         v.profiles.every(
           (p) => object(p) && slot(p.wireIndex) && hex(p.response) && p.response.length === 36,
         )

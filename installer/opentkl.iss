@@ -39,8 +39,8 @@ Source: "{#PackageRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Source: "{#DriverInstaller}"; DestName: "ViGEmBus-Setup.exe"; Flags: dontcopy
 
 [Icons]
-Name: "{group}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\app.ico"
-Name: "{autodesktop}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\app.ico"; Tasks: desktopicon
+Name: "{group}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\opentkl-{#AppVersion}.ico"; AppUserModelID: "FunctionElite.OpenTKL"
+Name: "{autodesktop}\Function Elite OpenTKL"; Filename: "{app}\runtime\Function Elite OpenTKL.exe"; IconFilename: "{app}\resources\icons\opentkl-{#AppVersion}.ico"; AppUserModelID: "FunctionElite.OpenTKL"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Function Elite OpenTKL"; Flags: dontcreatekey uninsdeletevalue

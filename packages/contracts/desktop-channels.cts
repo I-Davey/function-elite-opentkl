@@ -2,6 +2,10 @@ import type { KeyboardHost } from './desktop-host.cjs';
 import type { IpcEvent, IpcRegistrar } from './desktop-platform.cjs';
 
 export const channels = {
+  'keyboard:update-status': 'updateStatus',
+  'keyboard:check-updates': 'checkForUpdates',
+  'keyboard:download-update': 'downloadUpdate',
+  'keyboard:install-update': 'installUpdate',
   'keyboard:copy-analogue-profile': 'copyAnalogueProfile',
   'keyboard:remove-analogue-profile': 'removeAnalogueProfile',
   'keyboard:profile-library': 'profileLibrary',

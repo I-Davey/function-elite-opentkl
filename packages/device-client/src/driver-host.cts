@@ -8,6 +8,9 @@ export type Operation =
   | '--sensors'
   | '--current'
   | '--state'
+  | '--profile-state'
+  | '--profile-lighting'
+  | '--profile-snap'
   | '--snap'
   | '--lighting'
   | '--actuation'
@@ -18,6 +21,8 @@ export type Operation =
   | '--remaps'
   | '--apply-remap'
   | '--apply-remaps'
+  | '--runtime-remaps'
+  | '--apply-runtime-remaps'
   | '--apply-snap'
   | '--apply-software-actuation';
 export type DeviceResult = Record<string, unknown>;
@@ -49,6 +54,9 @@ const MODES = new Set<string>([
   '--sensors',
   '--current',
   '--state',
+  '--profile-state',
+  '--profile-lighting',
+  '--profile-snap',
   '--snap',
   '--lighting',
   '--actuation',
@@ -59,6 +67,8 @@ const MODES = new Set<string>([
   '--remaps',
   '--apply-remap',
   '--apply-remaps',
+  '--runtime-remaps',
+  '--apply-runtime-remaps',
   '--apply-snap',
   '--apply-software-actuation',
 ]);

@@ -23,6 +23,11 @@ let analogue = {profileId:'', settings:analogueSettings(), axes:{lx:0,ly:0,rx:0,
 const analogueProfiles = ${JSON.stringify(saved.analogueProfiles ?? (fs.existsSync(analogueFile) ? JSON.parse(fs.readFileSync(analogueFile, 'utf8')).profiles : {}))};
 let library = ${JSON.stringify(saved.profileLibrary ?? {automatic:false,pinned:false,defaultProfileId:'hardware-0',associations:{},names:{}})};
 window.keyboardHost = {
+  updateStatus: async () => ({phase:'idle',installedVersion:'preview',latestVersion:null,downloadedBytes:0,totalBytes:0,error:null}),
+  checkForUpdates: async () => ({phase:'current',installedVersion:'preview',latestVersion:null,downloadedBytes:0,totalBytes:0,error:null}),
+  downloadUpdate: unavailable,
+  installUpdate: unavailable,
+  onUpdateState: () => () => {},
   analogueState: async () => analogue,
   analogueProfile: async (id) => { analogue = {...analogue, profileId:id, settings:analogueSettings(analogueProfiles[id])}; return analogue; },
   analogueSave: async (settings,id=analogue.profileId) => { analogueProfiles[id] = settings; if(id===analogue.profileId)analogue = {...analogue,settings}; return analogue; },

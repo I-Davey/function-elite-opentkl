@@ -46,12 +46,13 @@ export interface RendererDiagnostics extends MonitorDiagnostics {
   lastDeviceEdit?: C.EditResult;
 }
 export interface ProfileSync {
+  isHardwareProfileLoaded(slot: number): boolean;
   syncHardwareProfiles(ownerTicket?: StateTicket): Promise<HardwareSync>;
   syncLiveValues(
     value: import('../../renderer-state/src/device-controls.js').LiveControls,
     ownerTicket?: StateTicket,
   ): void;
-  invalidateHardwareCache(): void;
+  invalidateHardwareCache(slot?: number): void;
   dispose(): void;
 }
 export interface RendererApi extends ProfileSync {

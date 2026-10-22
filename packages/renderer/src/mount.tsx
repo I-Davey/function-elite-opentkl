@@ -492,7 +492,7 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
         route: history.location.pathname,
         profileSource: diagnostics.hardwareSync
           ? 'mixed-native-and-local'
-          : 'offline',
+          : state.getSnapshot().device ? 'local-software' : 'offline',
         deviceSettingsLinked:
           context.deviceControls !== null &&
           state.getSnapshot().phase !== 'disconnected',
@@ -517,6 +517,7 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
       observe: (effect) =>
         reaction(() => captureControlSnapshot(context), effect),
       syncHardwareProfiles: sync.syncHardwareProfiles,
+      invalidateHardwareCache: sync.invalidateHardwareCache,
       syncLiveValues: sync.syncLiveValues,
       depthActive: () => ui.depth,
       activeWireSlot: () =>
@@ -580,7 +581,7 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
   const removeLifecycle = host.onLifecycleEvent(mirrorLifecycle);
   mirrorLifecycle(await host.lifecycleStatus());
   const actions: WorkspaceAction[] = [
-  { id: 'export', label: 'Export profiles', description: 'Save a copy of your local profiles to a file you choose.', complete: 'Profiles exported.', run: async () => {
+  { id: 'export', label: 'Export profiles', description: 'Save your complete profiles to Downloads and show the file in Explorer.', complete: 'Profiles exported.', run: async () => {
     save();
     await flushAnalogueChanges(); await flushSave();
     return host.exportProfiles();
@@ -607,7 +608,7 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
     try {
       const result = await host.recoverBackup();
       state.finishRecovery(ticket);
-      if (result) await sync.syncHardwareProfiles();
+      if (result) { sync.invalidateHardwareCache(); await sync.syncHardwareProfiles(); }
       return result;
     } catch (error) {
       if (state.isCurrent(ticket)) state.finishRecovery(ticket, error);
@@ -652,11 +653,11 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
         },
         ticket,
       );
-      // Keep writes blocked throughout session release and the first complete read.
+      // Only activate the selected profile; unrelated onboard slots stay unloaded.
       const startupHydration = state.beginHydration();
       try {
         await host.releaseSoftwareProfile();
-        await sync.syncHardwareProfiles();
+        if (!resumeSoftwareId) await sync.syncHardwareProfiles();
       } finally {
         startupHydration.close();
       }
@@ -664,13 +665,15 @@ export async function mountKeyboardApp(): Promise<RendererContext> {
         const id = resumeSoftwareId;
         resumeSoftwareId = null;
         if (keyboard.softwareProfiles.some((profile) => profile.id === id)) {
-          keyboard.setActiveProfileId(id, { fromDevice: false });
+          keyboard.setActiveProfileId(id, { fromDevice: true });
+          state.selectProfile({ kind: 'software', id, wireIndex: 4 });
+          const software = captureControlSnapshot(context).software;
+          if (software) controls?.schedule({ kind: 'software', wireIndex: 4, profile: software });
           await controls?.flush();
         }
       }
       report();
       await chooseAnalogueProfile();
-      void host.prepareSoftwareProfile().catch(error=>host.diagnostic({kind:'software-prepare',error:errorMessage(error)}));
     } catch (error) {
       if (
         state.getSnapshot().connectionGeneration === ticket.connectionGeneration

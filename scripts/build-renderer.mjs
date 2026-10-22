@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { rendererJsxOptions } from './renderer-compiler-options.mjs';
 const workspace = process.cwd(),
   app = path.join(workspace, 'dist/app');
+const manifest = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
 fs.mkdirSync(app, { recursive: true });
 fs.copyFileSync(
   'packages/sensor-monitor/src/sensor-monitor.css',
@@ -12,7 +13,7 @@ fs.copyFileSync(
 fs.copyFileSync('packages/renderer/src/application.css', path.join(app, 'application.css'));
 fs.writeFileSync(
   path.join(app, 'package.json'),
-  JSON.stringify({ name: 'nzxt-he-standalone', version: '0.4.0', main: 'main.cjs' }),
+  JSON.stringify({ name: manifest.name, version: manifest.version, main: 'main.cjs' }),
 );
 const result = await build({
   entryPoints: ['packages/renderer/src/entry.ts'],

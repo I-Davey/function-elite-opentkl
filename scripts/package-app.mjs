@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { collectRendererNotices } from './renderer-notices.mjs';
+import { rcedit } from 'rcedit';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -29,6 +30,18 @@ const electron = path.dirname(require('electron'));
 for (const entry of fs.readdirSync(electron)) {
   fs.cpSync(path.join(electron, entry), path.join(output, 'runtime', entry === 'electron.exe' ? 'Function Elite OpenTKL.exe' : entry), { recursive: true });
 }
+await rcedit(path.join(output, 'runtime/Function Elite OpenTKL.exe'), {
+  icon: path.join(output, 'resources/icons', 'opentkl-' + manifest.version + '.ico'),
+  'file-version': manifest.version.split('-')[0],
+  'product-version': manifest.version.split('-')[0],
+  'version-string': {
+    ProductName: 'Function Elite OpenTKL',
+    FileDescription: 'Function Elite OpenTKL',
+    CompanyName: 'Function Elite OpenTKL contributors',
+    InternalName: manifest.name,
+    OriginalFilename: 'Function Elite OpenTKL.exe',
+  },
+});
 const application = path.join(output, 'runtime/resources/app');
 fs.mkdirSync(application, { recursive: true });
 fs.writeFileSync(path.join(application, 'package.json'), JSON.stringify({ name: manifest.name, version: manifest.version, main: 'main.cjs' }));

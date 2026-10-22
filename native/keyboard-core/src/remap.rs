@@ -118,10 +118,81 @@ pub fn validate_batch(request: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The firmware's RAM table contains packed records, not stored per-key records.
+pub fn runtime_table(value: &Value) -> Result<Vec<u8>, String> {
+    let bytes = crate::lighting::bytes(value)?;
+    if bytes.len() > 2048 { return Err("Runtime mappings exceed the firmware's 2 KB buffer".into()); }
+    let mut offset = 0;
+    let mut seen = std::collections::HashSet::new();
+    while offset < bytes.len() {
+        let header = bytes.get(offset..offset + 5).ok_or("Truncated runtime mapping")?;
+        if header[1] > 1 || header[2] & 127 >= 127 || !seen.insert((header[1], header[2])) {
+            return Err("Invalid or duplicate runtime mapping key/layer".into());
+        }
+        let length = match header[0] {
+            1 | 2 => 5 + u16::from_le_bytes([header[3], header[4]]) as usize,
+            3..=7 => 5,
+            _ => return Err("Unknown runtime mapping kind".into()),
+        };
+        let record = bytes.get(offset..offset + length).ok_or("Truncated runtime mapping data")?;
+        if header[0] <= 2 {
+            let mut stored = vec![header[0]];
+            stored.extend_from_slice(&record[5..]);
+            record_as_runtime_macro(&stored)?;
+        } else if !(match header[0] {
+            3 => header[3] < 7 && header[4] == 0,
+            4 => header[3] < 127 && header[4] == 0,
+            5 => header[3] < 5 && header[4] == 0,
+            6 => header[3] == 0 && header[4] == 0,
+            7 => [64,80,82].contains(&header[3]) && header[4] == 0,
+            _ => false,
+        }) { return Err("Unsupported runtime mapping parameters".into()); }
+        offset += length;
+    }
+    Ok(bytes)
+}
+
+fn record_as_runtime_macro(bytes: &[u8]) -> Result<(), String> {
+    let value = Value::String(bytes.iter().map(|b| format!("{b:02x}")).collect());
+    record(&value).map(|_| ())
+}
+
+pub fn validate_runtime(request: &Value) -> Result<(), String> {
+    let fields = ["expectedActive", "expectedData", "data", "restore", "keys", "snap"];
+    let row = request.as_object().ok_or("Invalid runtime mapping request")?;
+    if row.len() != fields.len() || row.keys().any(|key| !fields.contains(&key.as_str())) || request["expectedActive"].as_u64().is_none_or(|slot| slot > 4) {
+        return Err("Invalid active runtime mapping profile".into());
+    }
+    runtime_table(&request["expectedData"])?;
+    runtime_table(&request["data"])?;
+    let restore = request["restore"].as_bool().ok_or("Invalid runtime restore flag")?;
+    if restore && request["expectedActive"] == 4 {
+        crate::actuation::validate_software(&serde_json::json!({"expectedActive":4,"keys":request["keys"]}))?;
+        crate::snap::validate(&serde_json::json!({"wireIndex":4,"expectedActive":4,"expectedData":request["snap"],"data":request["snap"]}))?;
+    } else if (!restore && request["expectedActive"] != 4) || !request["keys"].is_null() || !request["snap"].is_null() {
+        return Err("Unexpected runtime restore settings".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn runtime_tables_cover_both_levels_and_fn_without_accepting_malformed_records() {
+        let table = json!("0600180000060098000006011800000601980000");
+        assert_eq!(runtime_table(&table).unwrap().len(), 20);
+        for invalid in ["06", "0602180000", "06001800010600180000", "06001800000600180000", "010018ffff", "040018ff00"] {
+            assert!(runtime_table(&json!(invalid)).is_err(), "{invalid}");
+        }
+        let change = json!({"expectedActive":4,"expectedData":"","data":table,"restore":false,"keys":null,"snap":null});
+        assert!(validate_runtime(&change).is_ok());
+        let mut wrong_slot = change.clone(); wrong_slot["expectedActive"] = json!(0);
+        assert!(validate_runtime(&wrong_slot).is_err());
+        wrong_slot["restore"] = json!(true);
+        assert!(validate_runtime(&wrong_slot).is_ok());
+    }
     #[test]
     fn batch_remaps_are_bounded_unique_and_profile_scoped() {
         let first = json!({"wireIndex":4,"expectedActive":4,"physicalKey":26,"level":0,"fnLayer":false,"expectedData":"","data":"01010000000000"});
