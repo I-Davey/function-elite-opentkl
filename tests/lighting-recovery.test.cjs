@@ -5,37 +5,46 @@ const path = require('node:path');
 const settings = require('../dist/backend/settings-lighting.cjs');
 const reader = require('../dist/backend/profile-reader.cjs');
 
-test('lighting recovery reloads malformed RAM and verifies an uncertain onboard write', async () => {
+test('lighting rejects malformed selected-slot RAM and verifies uncertain writes without scanning other slots', async () => {
   const directory = fs.mkdtempSync(path.resolve('.build/lighting-recovery-'));
   const originalRead = reader.read;
   const solid = '01' + '00'.repeat(18) + 'ff0000';
   let data = 'ff', reloads = 0, writes = 0;
   const backend = {
     connection: async () => ({ activeProfileIndex: 3 }),
-    lighting: async () => ({
+    lighting: async (wireIndex) => {
+      assert.equal(wireIndex, 3, 'Only the affected lighting slot may be read');
+      return {
       activeProfileIndex: 3,
       profiles: [{ wireIndex: 3, layers: [{ kind: 'Base', data }] }],
-    }),
+      };
+    },
     applyLighting: async (request) => {
       assert.equal(request.expectedData, solid);
       assert.equal(request.data, solid);
       writes++;
-      data = 'ff';
+      data = solid;
       return { outcome: 'uncertain', error: 'Lighting readback mismatch' };
     },
   };
   reader.read = async (_profile, actualBackend) => {
     assert.equal(actualBackend, backend);
     reloads++;
-    data = solid;
+    throw Error('Lighting edits must not scan every onboard profile');
   };
   try {
+    await assert.rejects(settings.applyLightingRaw(
+      directory, { wireIndex: 3, layer: 'Base', data: solid }, backend,
+    ), /Truncated lighting record/);
+    assert.equal(writes, 0);
+    assert.equal(reloads, 0);
+    data = solid;
     const result = await settings.applyLightingRaw(
       directory, { wireIndex: 3, layer: 'Base', data: solid }, backend,
     );
     assert.equal(result.outcome, 'applied');
     assert.equal(result.verification, 'effect-and-physical-LEDs');
-    assert.equal(reloads, 2);
+    assert.equal(reloads, 0);
     assert.equal(writes, 1);
     await assert.rejects(settings.applyLightingRaw(
       directory, { wireIndex: 3, layer: 'Base', data: 'ff' }, backend,
