@@ -136,10 +136,13 @@ export function registerUpdater(ipc: IpcRegistrar, win: Window, profile: string,
     publish({ phase: 'installing', error: null });
     try {
     if (await sha256(verified.file) !== verified.hash) return failure(Error('Downloaded installer changed; download it again'));
-    const errorFile = path.join(directory, 'install-error.txt');
+    const errorFile = path.join(directory, 'install-error.txt'), readyFile = path.join(directory, 'install-helper-ready.txt');
     if (fs.existsSync(errorFile)) fs.unlinkSync(errorFile);
+    if (fs.existsSync(readyFile)) fs.unlinkSync(readyFile);
     // The helper waits for normal shutdown and refuses installation if keyboard recovery failed.
     const script = `$ErrorActionPreference='Stop'; try {
+      $null = Get-Command Get-Process,Wait-Process,Get-FileHash,Start-Process -ErrorAction Stop;
+      [IO.File]::WriteAllText($env:OPENTKL_UPDATE_READY, 'ready');
       $taskOld = Get-Process -Id ([int]$env:OPENTKL_UPDATE_PID) -ErrorAction SilentlyContinue;
       if ($taskOld) { $taskOld | Wait-Process -Timeout 300; }
       foreach ($taskName in @('analogue-session.json','analogue-runtime-session.json','analogue-lighting-session.json','hardware-read-session.json','software-session.json')) {
@@ -151,17 +154,35 @@ export function registerUpdater(ipc: IpcRegistrar, win: Window, profile: string,
       $taskSetup = Start-Process -FilePath $env:OPENTKL_UPDATE_FILE -ArgumentList $taskArguments -PassThru -Wait;
       if ($taskSetup.ExitCode -ne 0) { throw ('Installer exited with code ' + $taskSetup.ExitCode); }
     } catch {
-      $_.Exception.Message | Set-Content -LiteralPath $env:OPENTKL_UPDATE_ERROR -Encoding UTF8;
+      [IO.File]::WriteAllText($env:OPENTKL_UPDATE_ERROR, $_.Exception.Message);
       Start-Process -FilePath $env:OPENTKL_RESTART_EXE -ArgumentList @(('"' + $env:OPENTKL_RESTART_APP + '"'), ('"--data-dir=' + $env:OPENTKL_RESTART_DATA + '"')) -WindowStyle Hidden;
     }`;
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      detached: true, windowsHide: true, stdio: 'ignore', env: { ...process.env,
+    const environment = { ...process.env };
+    // PowerShell 7's inherited module path can hide Windows PowerShell's checksum cmdlet.
+    delete environment.PSModulePath;
+    const log = fs.openSync(path.join(directory, 'install-helper.log'), 'a');
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+      detached: true, windowsHide: true, stdio: ['ignore', log, log], env: { ...environment,
         OPENTKL_UPDATE_PID: String(process.pid), OPENTKL_UPDATE_PROFILE: profile,
-        OPENTKL_UPDATE_FILE: verified.file, OPENTKL_UPDATE_HASH: verified.hash, OPENTKL_UPDATE_ERROR: errorFile,
+        OPENTKL_UPDATE_FILE: verified.file, OPENTKL_UPDATE_HASH: verified.hash, OPENTKL_UPDATE_ERROR: errorFile, OPENTKL_UPDATE_READY: readyFile,
         OPENTKL_UPDATE_DIRECTORY: path.basename(process.execPath) === 'Function Elite OpenTKL.exe' ? path.dirname(path.dirname(process.execPath)) : '',
         OPENTKL_RESTART_EXE: process.execPath, OPENTKL_RESTART_APP: path.resolve(__dirname, '..'), OPENTKL_RESTART_DATA: path.dirname(profile) },
     });
-    await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+    let helperExit: number | null | undefined;
+    child.once('exit', code => { helperExit = code; });
+    try {
+      await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+      const deadline = Date.now() + 15000;
+      while (!fs.existsSync(readyFile)) {
+        if (helperExit !== undefined || Date.now() > deadline) {
+          throw Error(fs.existsSync(errorFile) ? fs.readFileSync(errorFile, 'utf8') : 'Installer helper did not start; see updates/install-helper.log');
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    } catch (caught) {
+      child.kill();
+      throw caught;
+    } finally { fs.closeSync(log); }
     child.unref();
     publish({ phase: 'installing', error: null });
     setImmediate(() => app.quit());
