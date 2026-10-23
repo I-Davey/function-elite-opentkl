@@ -36,7 +36,7 @@ if ((Test-Path -LiteralPath $builtController) -and (Test-Path -LiteralPath $inst
 }
 Push-Location $build
 try {
-  & "$($compiler.FullName)\bin\Hostx64\x64\cl.exe" /nologo /std:c++17 /EHsc /O2 /MT /LD (Join-Path $controllerRoot 'native\analog-controller\controller.cpp') /Fe:controller.node /link kernel32.lib /DYNAMICBASE /NXCOMPAT
+  & "$($compiler.FullName)\bin\Hostx64\x64\cl.exe" /nologo /std:c++17 /EHsc /O2 /MT /LD (Join-Path $controllerRoot 'native\analog-controller\controller.cpp') /Fe:controller.node /link kernel32.lib user32.lib /DYNAMICBASE /NXCOMPAT
   if ($LASTEXITCODE -ne 0) { throw 'Controller compilation failed.' }
   Copy-Item -LiteralPath (Join-Path $build 'controller.node') -Destination $destination -Force
 } finally { Pop-Location }

@@ -5,7 +5,7 @@ import * as lighting from '../../../backend/src/lighting.cjs';
 import { physicalToWire } from '../../../backend/src/remaps.cjs';
 import { durable, replaceDurable } from '../../../backend/src/transaction-journal.cjs';
 import { object } from '../../../contracts/desktop.cjs';
-import { feedbackColor, type AnalogueProfile } from '../../../contracts/desktop-analogue.cjs';
+import { feedbackColor, isMapped, type AnalogueProfile } from '../../../contracts/desktop-analogue.cjs';
 import type { WireLightingRecord } from '../../../backend/src/contracts.cjs';
 
 const location = (profile: string) => path.join(profile, 'analogue-lighting-session.json');
@@ -68,7 +68,7 @@ export function createAnalogueFeedback(profile: string) {
         lighting.records(session.base, 'Base'); lighting.records(session.reactive, 'Reactive');
         durable(location(profile), session);
       }
-      const mapped = Object.entries(settings.bindings).filter(([, b]) => b.enabled);
+      const mapped = Object.entries(settings.bindings).filter(([, b]) => isMapped(b));
       const keys = new Set(mapped.map(([key]) => physicalToWire.get(Number(key))!));
       const base = omitKeys(lighting.records(session.base, 'Base'), keys);
       const mode = (key: string) => pending.includes(Number(key)) ? 'pending' : overridden.includes(Number(key)) ? 'override' : settings.bindings[key].overwriteDefault ? 'suppressed' : 'active';

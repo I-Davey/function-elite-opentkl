@@ -19,7 +19,7 @@ const noop = () => {};
 const defaultOverride = {enabled:false,mode:'toggle',shortcut:[226,225,30],scope:'all',keys:[]};
 const defaultFeedback = {enabled:false,activeColor:'#a87dff',suppressedColor:'#57cdb6',overrideColor:'#ffbb55',brightness:.7,fadeMs:80};
 const analogueSettings = (saved={}) => ({schemaVersion:2,normalizeSticks:true,bindings:{},...saved,override:{...defaultOverride,...saved.override},feedback:{...defaultFeedback,...saved.feedback}});
-let analogue = {profileId:'', settings:analogueSettings(), axes:{lx:0,ly:0,rx:0,ry:0,lt:0,rt:0}, buttons:{}, keyLevels:{}, rawMm:{}, buttonMask:0, running:false, connected:false, error:'', rateHz:0, sampleAgeMs:null, recoveryPending:false, preview:true,overriddenKeys:[],overrideRequested:false,transitioning:false,calibration:null,feedbackError:''};
+let analogue = {profileId:'', settings:analogueSettings(), axes:{lx:0,ly:0,rx:0,ry:0,lt:0,rt:0}, buttons:{}, keyLevels:{}, rawMm:{}, buttonMask:0, extraKeys:[], running:false, connected:false, error:'', rateHz:0, sampleAgeMs:null, recoveryPending:false, preview:true,overriddenKeys:[],overrideRequested:false,transitioning:false,calibration:null,feedbackError:''};
 const analogueProfiles = ${JSON.stringify(saved.analogueProfiles ?? (fs.existsSync(analogueFile) ? JSON.parse(fs.readFileSync(analogueFile, 'utf8')).profiles : {}))};
 let library = ${JSON.stringify(saved.profileLibrary ?? {automatic:false,pinned:false,defaultProfileId:'hardware-0',associations:{},names:{}})};
 window.keyboardHost = {

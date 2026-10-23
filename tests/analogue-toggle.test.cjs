@@ -51,6 +51,7 @@ test('desktop listener can enable output from off, disable every binding, then e
         attached=enabled;return enabled ? 'enabled' : 'disabled';
       },
       update: report => { if(!attached)return 'disabled';lastReport = report; return 'updated'; },
+      updateKeys: () => 'updated',
     }],
   ];
   const previous = mocks.map(([file, exports]) => {

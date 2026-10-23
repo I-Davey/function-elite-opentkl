@@ -1,3 +1,4 @@
+import { keyboardOutputs } from './desktop-keyboard.cjs';
 /** CAM patch schema v2, shared by the editor, import path and controller engine. */
 export const axes = { lx: 'Left stick · horizontal', ly: 'Left stick · vertical', rx: 'Right stick · horizontal', ry: 'Right stick · vertical', lt: 'Left trigger', rt: 'Right trigger' };
 export const buttons = { a: 0x1000, b: 0x2000, x: 0x4000, y: 0x8000, lb: 0x100, rb: 0x200, ls: 0x40, rs: 0x80, start: 0x10, back: 0x20, dpadUp: 1, dpadDown: 2, dpadLeft: 4, dpadRight: 8 };
@@ -12,6 +13,7 @@ export interface CalibrationState { key: number; phase: 'released' | 'pressed' |
 export type CalibrationRequest = { action: 'start' | 'capture' | 'apply' | 'cancel'; key: number };
 export interface Binding {
   enabled: boolean; overwriteDefault: boolean; channel: Channel; direction: 1 | -1;
+  extraKey?: number;
   startMm: number; endMm: number; curve: 'linear' | 'exponential' | 'logarithmic' | 'custom';
   strength: number; points: Point[]; outputMin: number; outputMax: number; smoothMs: number;
   pressThreshold: number; releaseThreshold: number;
@@ -21,6 +23,7 @@ export interface AnalogueProfile { schemaVersion: 2; normalizeSticks: boolean; b
 export interface AnalogueFrame {
   axes: Record<Axis, number>; buttons: Partial<Record<keyof typeof buttons, boolean>>;
   keyLevels: Record<string, number>; rawMm: Record<string, number>; buttonMask: number;
+  extraKeys: number[];
 }
 export interface AnalogueState extends AnalogueFrame {
   running: boolean; connected: boolean; error: string; rateHz: number; sampleAgeMs: number | null;
@@ -28,6 +31,7 @@ export interface AnalogueState extends AnalogueFrame {
   overriddenKeys: number[]; overrideRequested: boolean; transitioning: boolean; calibration: CalibrationState | null; feedbackError: string;
 }
 export const isButton = (channel: Channel): channel is keyof typeof buttons => Object.hasOwn(buttons, channel);
+export const isMapped = (b: Binding | undefined): boolean => !!b && (b.enabled || b.extraKey !== undefined);
 export const isStick = (channel: Channel) => ['lx', 'ly', 'rx', 'ry'].includes(channel);
 export const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const numeric = (value: unknown, fallback: number, min: number, max: number) =>
@@ -38,6 +42,7 @@ function record(value: unknown): Record<string, unknown> {
 }
 export function binding(value: unknown = {}): Binding {
   const row = record(value);
+  if (row.extraKey !== undefined && (!Number.isInteger(row.extraKey) || !Object.hasOwn(keyboardOutputs, Number(row.extraKey)))) throw Error('Unsupported extra key');
   const startMm = numeric(row.startMm, .1, 0, 3.9), outputMin = numeric(row.outputMin, 0, 0, 1);
   const pressThreshold = numeric(row.pressThreshold, .5, .01, 1);
   const points: Point[] = (Array.isArray(row.points) ? row.points.slice(0, 32) : [{ x: .5, y: .5 }])
@@ -53,6 +58,7 @@ export function binding(value: unknown = {}): Binding {
   }
   return {
     enabled: row.enabled === true, overwriteDefault: row.overwriteDefault === true,
+    ...(row.extraKey === undefined ? {} : { extraKey: Number(row.extraKey) }),
     channel: typeof row.channel === 'string' && Object.hasOwn(channels, row.channel) ? row.channel as Channel : 'ly',
     direction: row.direction === -1 ? -1 : 1, startMm, endMm: numeric(row.endMm, 4, startMm + .05, 4),
     curve: ['linear', 'exponential', 'logarithmic', 'custom'].includes(String(row.curve)) ? row.curve as Binding['curve'] : 'linear',
@@ -112,7 +118,7 @@ export function evaluate(mm: number, b: Binding): number {
   if (!Number.isFinite(mm) || mm <= b.startMm) return 0;
   return clamp(b.outputMin + (b.outputMax - b.outputMin) * shape((mm - b.startMm) / (b.endMm - b.startMm), b));
 }
-export const neutralFrame = (): AnalogueFrame => ({ axes: { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0 }, buttons: {}, keyLevels: {}, rawMm: {}, buttonMask: 0 });
+export const neutralFrame = (): AnalogueFrame => ({ axes: { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0 }, buttons: {}, keyLevels: {}, rawMm: {}, buttonMask: 0, extraKeys: [] });
 /** Physical travel shortcuts keep working while the game has focus or a key is suppressed. */
 export class OverrideShortcut {
   private held = new Set<number>();
@@ -148,13 +154,21 @@ export function controllerContribution(frame: AnalogueFrame, key: string, b: Bin
 export class AnalogueEngine {
   private filtered = new Map<string, number>();
   private held = new Map<string, boolean>();
-  reset() { this.filtered.clear(); this.held.clear(); }
+  private extraHeld = new Map<string, boolean>();
+  reset() { this.filtered.clear(); this.held.clear(); this.extraHeld.clear(); }
   update(rawMm: Record<string, number>, settings: AnalogueProfile, elapsedMs: number): AnalogueFrame {
     const result = neutralFrame(), positive = neutralFrame().axes, negative = neutralFrame().axes;
     result.rawMm = rawMm;
     for (const [code, b] of Object.entries(settings.bindings)) {
-      if (!b.enabled) continue;
+      if (!isMapped(b)) continue;
       if (!Number.isFinite(rawMm[code])) throw Error('Mapped key sensor unavailable: ' + code);
+      if (b.extraKey !== undefined) {
+        // Extra keys use travel directly, without applying a controller response curve.
+        const pressed = rawMm[code] > (this.extraHeld.get(code) ? Math.max(0, b.startMm - .05) : b.startMm);
+        this.extraHeld.set(code, pressed);
+        if (pressed && (b.overwriteDefault || b.extraKey !== Number(code)) && !result.extraKeys.includes(b.extraKey)) result.extraKeys.push(b.extraKey);
+      }
+      if (!b.enabled) continue;
       const desired = evaluate(rawMm[code], b), previous = this.filtered.get(code) ?? 0;
       let value = b.smoothMs > 0 ? previous + (desired - previous) * -Math.expm1(-clamp(elapsedMs, 0, 100) / b.smoothMs) : desired;
       if (!desired && value < .001) value = 0;

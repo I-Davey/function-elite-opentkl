@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -36,6 +37,27 @@ static ULONG lastResult=Success;
 static unsigned long long updates=0;
 static auto lastInput=std::chrono::steady_clock::now();
 static std::string fault;
+static std::set<WORD> keyboardHeld;
+static auto lastKeyboardInput=std::chrono::steady_clock::now();
+
+// Retain ownership until Windows accepts a release, so the watchdog can retry it.
+static bool keyboardLocked(const std::set<WORD>& wanted) {
+    for(auto it=keyboardHeld.begin();it!=keyboardHeld.end();) {
+        if(wanted.count(*it)){++it;continue;}
+        INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wScan=*it&0xff;
+        input.ki.dwFlags=KEYEVENTF_SCANCODE|KEYEVENTF_KEYUP|((*it&0xff00)?KEYEVENTF_EXTENDEDKEY:0);
+        if(SendInput(1,&input,sizeof(INPUT))!=1)return false;
+        it=keyboardHeld.erase(it);
+    }
+    for(WORD key:wanted) {
+        if(keyboardHeld.count(key))continue;
+        INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wScan=key&0xff;
+        input.ki.dwFlags=KEYEVENTF_SCANCODE|((key&0xff00)?KEYEVENTF_EXTENDEDKEY:0);
+        if(SendInput(1,&input,sizeof(INPUT))!=1)return false;
+        keyboardHeld.insert(key);
+    }
+    return true;
+}
 
 static void neutralLocked() {
     report={};
@@ -84,17 +106,28 @@ static napi_value initialize(napi_env env,napi_callback_info info) {
     PROC(freeTarget,"vigem_target_free") PROC(addTarget,"vigem_target_add")
     PROC(removeTarget,"vigem_target_remove") PROC(sendReport,"vigem_target_x360_update")
 #undef PROC
-    running=true;
-    watchdog=std::thread([]{
-        while(running) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(25));
-            std::lock_guard<std::mutex> lock(gate);
-            if(outputEnabled && !stale && std::chrono::steady_clock::now()-lastInput>std::chrono::milliseconds(250)) {
-                neutralLocked();stale=true;
-            }
-        }
-    });
     return text(env,"ready");
+}
+static napi_value updateKeys(napi_env env,napi_callback_info info) {
+    const auto report=argument(env,info);
+    std::set<WORD> wanted;
+    if(!report.empty()) {
+        std::istringstream input(report);unsigned int value=0;char comma=0;
+        while(input>>value) {
+            if(!value || value>0xe07f || !(value&0x7f) || (value&0xff)>0x7f || ((value&0xff00)!=0 && (value&0xff00)!=0xe000))return text(env,"Invalid keyboard scan code");
+            wanted.insert(static_cast<WORD>(value));
+            if(wanted.size()>88)return text(env,"Too many extra keys");
+            input>>std::ws;if(input.eof())break;
+            if(!(input>>comma)||comma!=','||input.peek()==EOF)return text(env,"Invalid keyboard report");
+        }
+        if(!input.eof())return text(env,"Invalid keyboard report");
+    }
+    std::lock_guard<std::mutex> lock(gate);
+    if(!keyboardLocked(wanted)) {
+        keyboardLocked({});
+        return text(env,"Windows blocked extra key output; check the game's administrator permissions");
+    }
+    lastKeyboardInput=std::chrono::steady_clock::now();return text(env,"updated");
 }
 static napi_value enable(napi_env env,napi_callback_info info) {
     size_t count=1;napi_value v=nullptr;bool wanted=false;getInfo(env,info,&count,&v,nullptr,nullptr);if(count)getBool(env,v,&wanted);
@@ -142,7 +175,7 @@ static napi_value status(napi_env env,napi_callback_info) {
 }
 static void cleanup(void*) {
     running=false;if(watchdog.joinable())watchdog.join();
-    std::lock_guard<std::mutex> lock(gate);detachLocked();if(library){FreeLibrary(library);library=nullptr;}
+    std::lock_guard<std::mutex> lock(gate);keyboardLocked({});detachLocked();if(library){FreeLibrary(library);library=nullptr;}
 }
 extern "C" __declspec(dllexport) int node_api_module_get_api_version_v1(){return 8;}
 extern "C" __declspec(dllexport) napi_value napi_register_module_v1(napi_env env,napi_value exports){
@@ -152,7 +185,18 @@ extern "C" __declspec(dllexport) napi_value napi_register_module_v1(napi_env env
     RESOLVE(setProperty,"napi_set_named_property") RESOLVE(getInfo,"napi_get_cb_info")
     RESOLVE(getString,"napi_get_value_string_utf8") RESOLVE(getBool,"napi_get_value_bool") RESOLVE(cleanupHook,"napi_add_env_cleanup_hook")
 #undef RESOLVE
-    struct Method{const char* name;Callback callback;}methods[]={{"initialize",initialize},{"setEnabled",enable},{"update",update},{"status",status}};
+    struct Method{const char* name;Callback callback;}methods[]={{"initialize",initialize},{"setEnabled",enable},{"update",update},{"updateKeys",updateKeys},{"status",status}};
     for(auto m:methods){napi_value f=nullptr;createFunction(env,m.name,SIZE_MAX,m.callback,nullptr,&f);setProperty(env,exports,m.name,f);}
-    cleanupHook(env,cleanup,nullptr);return exports;
+    cleanupHook(env,cleanup,nullptr);
+    running=true;
+    watchdog=std::thread([]{
+        while(running) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            std::lock_guard<std::mutex> lock(gate);
+            const auto now=std::chrono::steady_clock::now();
+            if(outputEnabled && !stale && now-lastInput>std::chrono::milliseconds(250)) { neutralLocked();stale=true; }
+            if(!keyboardHeld.empty() && now-lastKeyboardInput>std::chrono::milliseconds(250))keyboardLocked({});
+        }
+    });
+    return exports;
 }

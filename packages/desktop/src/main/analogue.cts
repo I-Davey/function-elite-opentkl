@@ -3,7 +3,8 @@ import path from 'node:path';
 import type { Serial, IpcRegistrar, Window, Electron } from '../../../contracts/desktop-platform.cjs';
 import { registrar } from '../../../contracts/desktop-channels.cjs';
 import { object, errorMessage } from '../../../contracts/desktop.cjs';
-import { AnalogueEngine, OverrideShortcut, binding, emptyProfile, neutralFrame, parseProfile, type AnalogueProfile, type AnalogueState, type CalibrationState, type TravelCalibration } from '../../../contracts/desktop-analogue.cjs';
+import { AnalogueEngine, OverrideShortcut, binding, emptyProfile, neutralFrame, parseProfile, isMapped, type AnalogueProfile, type AnalogueState, type CalibrationState, type TravelCalibration } from '../../../contracts/desktop-analogue.cjs';
+import { keyboardOutputs } from '../../../contracts/desktop-keyboard.cjs';
 import { createAnalogueFeedback, restoreAnalogueLighting } from './analogue-feedback.cjs';
 import { createRuntimeRemaps, restoreRuntimeRemaps, runtimeJournal } from './analogue-runtime-remaps.cjs';
 import * as devices from '../../../backend/src/devices.cjs';
@@ -15,7 +16,7 @@ import { ProfileStore } from './profile-store.cjs';
 import { profileId as validId } from '../../../contracts/desktop-profiles.cjs';
 import { exportJson } from './export-json.cjs';
 
-interface Controller { initialize(file: string): string; setEnabled(enabled: boolean): string; update(report: string): string; status(): string }
+interface Controller { initialize(file: string): string; setEnabled(enabled: boolean): string; update(report: string): string; updateKeys(report: string): string; status(): string }
 interface Journal { devicePath: string; records: RemapRawInput[] }
 // Same empty one-shot macro used by the CAM patch, on both actuation/Fn layers.
 const quiet = '01010000000000';
@@ -66,12 +67,12 @@ export async function restoreAnalogueKeys(profile: string, keys?: number[]): Pro
   else fs.unlinkSync(journalFile(profile));
 }
 const suppressedKeys = (settings: AnalogueProfile, excluded: number[] = []) => Object.entries(settings.bindings)
-  .filter(([key, b]) => b.enabled && b.overwriteDefault && !excluded.includes(Number(key))).map(([key]) => Number(key)).sort((a, b) => a - b);
+  .filter(([key, b]) => isMapped(b) && b.overwriteDefault && !excluded.includes(Number(key))).map(([key]) => Number(key)).sort((a, b) => a - b);
 function validProfile(value: unknown): AnalogueProfile {
   const parsed = parseProfile(value);
   for (const key of Object.keys(parsed.bindings)) if (!remaps.physicalToWire.has(Number(key))) throw Error('Unknown keyboard key: ' + key);
   for (const key of parsed.override.shortcut) if (!remaps.physicalToWire.has(key)) throw Error('Unknown shortcut key: ' + key);
-  if (parsed.override.enabled && parsed.override.shortcut.some(key => parsed.bindings[key]?.enabled)) throw Error('Use unmapped keys for the override shortcut');
+  if (parsed.override.enabled && parsed.override.shortcut.some(key => isMapped(parsed.bindings[key]))) throw Error('Use unmapped keys for the override shortcut');
   return parsed;
 }
 
@@ -85,6 +86,7 @@ export function createAnalogue(profile: string, serial: Serial) {
   } catch (error) { loadError = errorMessage(error); }
   let settings = emptyProfile(), profileId = '', output: Controller | undefined;
   let outputWanted = false;
+  let controllerEnabled = false;
   let activeDevice = '', activeSlot = -1;
   let running = false, generation = 0, timer: NodeJS.Timeout | undefined, lastSample = 0, lastTick = 0, rateHz = 0, error = loadError;
   let shortcutMonitoring = false;
@@ -105,8 +107,18 @@ export function createAnalogue(profile: string, serial: Serial) {
   const silence = (detach = true) => {
     running = false; shortcutMonitoring = false; generation++; clearTimeout(timer); engine.reset(); frame = neutralFrame(); latest = undefined; lastSample = 0; rateHz = 0;
     shortcut.reset(); overriddenKeys = []; transitioning = false; calibration = null; calibrationSamples = []; released = undefined;
-    if (detach) output?.setEnabled(false);
-    else output?.update('0,0,0,0,0,0,0');
+    output?.updateKeys('');
+    if (detach) { output?.setEnabled(false); controllerEnabled = false; }
+    else if (controllerEnabled) output?.update('0,0,0,0,0,0,0');
+  };
+  const sendFrame = (value = frame) => {
+    if (!output) throw Error('Output is not initialized');
+    const keyboard = output.updateKeys(value.extraKeys.map(key => keyboardOutputs[key].scanCode).join(','));
+    if (keyboard !== 'updated') throw Error(keyboard);
+    if (controllerEnabled) {
+      const result = output.update([...Object.values(value.axes), value.buttonMask].join(','));
+      if (result !== 'updated') throw Error(result);
+    }
   };
   // Caller holds the shared device transaction queue, including during shutdown.
   const stopInside = async (detach = true) => {
@@ -191,22 +203,20 @@ export function createAnalogue(profile: string, serial: Serial) {
         } else {
           const requested = now < shortcutCaptureUntil ? shortcut.active : shortcut.update(rawMm, settings.override);
           outputWanted = !requested;
-          const targets = requested ? Object.keys(settings.bindings).map(Number).filter(key => settings.bindings[key].enabled).sort((a, b) => a - b) : [];
+          const targets = requested ? Object.keys(settings.bindings).map(Number).filter(key => isMapped(settings.bindings[key])).sort((a, b) => a - b) : [];
           transitioning = JSON.stringify(targets) !== JSON.stringify(overriddenKeys);
           const blocked = new Set([...targets, ...overriddenKeys]);
           const before = suppressedKeys(settings, overriddenKeys), after = suppressedKeys(settings, targets);
           const restore = before.filter(key => !after.includes(key)), add = after.filter(key => !before.includes(key));
-          const effective = { ...settings, bindings: Object.fromEntries(Object.entries(settings.bindings).map(([key, b]) => [key, blocked.has(Number(key)) ? { ...b, enabled: false } : b])) };
+          const effective = { ...settings, bindings: Object.fromEntries(Object.entries(settings.bindings).map(([key, b]) => [key, blocked.has(Number(key)) ? { ...b, enabled: false, extraKey: undefined } : b])) };
           frame = engine.update(rawMm, effective, elapsed);
-          const result = output!.update([...Object.values(frame.axes), frame.buttonMask].join(','));
-          if (result !== 'updated') throw Error(result);
+          sendFrame();
           // Publish fresh input before any verified mapping or lighting transaction waits.
           lastTick = lastSample = now;
           if (transitioning && [...restore, ...add].every(key => rawMm[key] <= settings.bindings[key].startMm)) {
             // Keep the controller attached to the game; release every control during mapping writes.
             if (restore.length || add.length) {
-              const neutral = output!.update('0,0,0,0,0,0,0');
-              if (neutral !== 'updated') throw Error(neutral);
+              sendFrame(neutralFrame());
               if (runtimeRemaps.active) await runtimeRemaps.update(after);
               else {
                 await paint(targets, Date.now(), [...blocked]);
@@ -240,12 +250,12 @@ export function createAnalogue(profile: string, serial: Serial) {
     }
   }
   function monitorShortcut() {
-    if (!settings.override.enabled || !settings.override.shortcut.length || !Object.values(settings.bindings).some(b => b.enabled)) return;
+    if (!settings.override.enabled || !settings.override.shortcut.length || !Object.values(settings.bindings).some(isMapped)) return;
     shortcutMonitoring = true; shortcut.active = true; shortcut.rearm();
     timer = setTimeout(() => void tick(generation), 100);
   }
   async function startInside(paused = false) {
-    if (!Object.values(settings.bindings).some((b) => b.enabled)) throw Error('Map at least one key first');
+    if (!Object.values(settings.bindings).some(isMapped)) throw Error('Map at least one key first');
     await stopInside(false);
     // Read the device before creating a game controller or changing normal key output.
     const connection = await devices.connection();
@@ -254,14 +264,17 @@ export function createAnalogue(profile: string, serial: Serial) {
     const sample = depth.decode(await devices.sensors());
     activeDevice = connection.devicePath ?? ''; activeSlot = connection.activeProfileIndex;
     const available = new Set(sample.keys.map((key) => String(key.physicalKeyId)));
-    for (const [key, b] of Object.entries(settings.bindings)) if (b.enabled && !available.has(key)) throw Error('Sensor unavailable for key ' + key);
+    for (const [key, b] of Object.entries(settings.bindings)) if (isMapped(b) && !available.has(key)) throw Error('Sensor unavailable for key ' + key);
     if (!output) {
       output = require(path.join(__dirname, '../../native/analog-controller/controller.node')) as Controller;
-      const result = output.initialize(path.join(__dirname, '../../resources/controller/ViGEmClient.dll'));
-      if (result !== 'ready') { output = undefined; throw Error(result); }
     }
-    const result = output.setEnabled(true);
-    if (result !== 'enabled') throw Error(result + '. Install the ViGEmBus driver if it is missing.');
+    if (Object.values(settings.bindings).some(b => b.enabled)) {
+      const initialized = output.initialize(path.join(__dirname, '../../resources/controller/ViGEmClient.dll'));
+      if (initialized !== 'ready') throw Error(initialized);
+      const result = output.setEnabled(true);
+      if (result !== 'enabled') throw Error(result + '. Install the ViGEmBus driver if it is missing.');
+      controllerEnabled = true;
+    } else if (controllerEnabled) { output.setEnabled(false); controllerEnabled = false; }
     try {
       await runtimeRemaps.start(suppressedKeys(settings), activeSlot);
       if (runtimeRemaps.active) await runtimeRemaps.update(paused ? [] : suppressedKeys(settings));
@@ -269,7 +282,7 @@ export function createAnalogue(profile: string, serial: Serial) {
     } catch (caught) { await stopInside(); throw caught; }
     shortcut.active = paused;
     outputWanted = !paused;
-    if (paused) overriddenKeys = Object.keys(settings.bindings).map(Number).filter(key => settings.bindings[key].enabled).sort((a, b) => a - b);
+    if (paused) overriddenKeys = Object.keys(settings.bindings).map(Number).filter(key => isMapped(settings.bindings[key])).sort((a, b) => a - b);
     error = ''; feedbackError = ''; feedbackFailed = false; running = true; lastTick = 0;
     timer = setTimeout(() => void tick(generation), 0);
   }
@@ -283,7 +296,7 @@ export function createAnalogue(profile: string, serial: Serial) {
     if (id !== profileId) {
       await stopInside(false); profileId = id; settings = profiles[id] ?? emptyProfile(); error = loadError;
     }
-    if (!running && !shortcutMonitoring && (outputWanted || settings.override.enabled) && Object.values(settings.bindings).some(b=>b.enabled)) {
+    if (!running && !shortcutMonitoring && (outputWanted || settings.override.enabled) && Object.values(settings.bindings).some(isMapped)) {
       try { await startInside(!outputWanted); } catch (caught) { error=errorMessage(caught); }
     }
     return state();
@@ -297,14 +310,15 @@ export function createAnalogue(profile: string, serial: Serial) {
     }
     if (!profileId) throw Error('Select a keyboard profile first');
     const next = validProfile(value), wasRunning = running, wasPaused = shortcut.active;
-    const changedKeys = JSON.stringify(suppressedKeys(settings)) !== JSON.stringify(suppressedKeys(next)) || JSON.stringify(settings.override) !== JSON.stringify(next.override);
+    const changedKeys = JSON.stringify(suppressedKeys(settings)) !== JSON.stringify(suppressedKeys(next)) || JSON.stringify(settings.override) !== JSON.stringify(next.override) || Object.values(settings.bindings).some(b => b.enabled) !== Object.values(next.bindings).some(b => b.enabled);
     if (changedKeys) await stopInside(false);
     const previous = settings; settings = next;
     try { save(); } catch (caught) { settings = previous; throw caught; }
     engine.reset();
+    output?.updateKeys('');
     feedbackFailed = false; feedbackError = '';
     if (wasRunning && changedKeys) await startInside(wasPaused);
-    else if (!running && next.override.enabled && Object.values(next.bindings).some(b => b.enabled)) {
+    else if (!running && next.override.enabled && Object.values(next.bindings).some(isMapped)) {
       try { await startInside(true); } catch (caught) { error = errorMessage(caught); }
     }
     return state();
@@ -313,7 +327,7 @@ export function createAnalogue(profile: string, serial: Serial) {
     if (typeof value !== 'boolean') throw Error('Expected analogue enabled flag');
     outputWanted = value;
     try {
-      if (running) { shortcut.active = !value; engine.reset(); output!.update('0,0,0,0,0,0,0'); frame = neutralFrame(); }
+      if (running) { shortcut.active = !value; engine.reset(); frame = neutralFrame(); sendFrame(); }
       else if (value || settings.override.enabled) await startInside(!value);
       else { await stopInside(); error = ''; }
     }

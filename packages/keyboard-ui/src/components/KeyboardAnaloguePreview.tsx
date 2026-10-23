@@ -4,7 +4,8 @@ import { KeyboardRows, KeyPreview, RemapKeyWrapper } from './KeyboardRows.js';
 import { keyboardPreviewStyles } from './keyboardPreviewStyles.js';
 import { useResizeObserver } from './useResizeObserver.js';
 import type { KeyboardLayout } from '../layouts/types.js';
-import { feedbackColor, type AnalogueProfile } from '../../../contracts/desktop-analogue.cjs';
+import { feedbackColor, isMapped, type AnalogueProfile } from '../../../contracts/desktop-analogue.cjs';
+import { keyboardOutputs } from '../../../contracts/desktop-keyboard.cjs';
 import { getKeyInfo } from '../layouts/keyInfo.js';
 
 /** The normal remapping keycaps and responsive preview surface, with live travel overlays. */
@@ -23,7 +24,7 @@ export function KeyboardAnaloguePreview({ layout, keyboardInfo, bindings, select
       <div css={styles.keyboard}>
         <KeyboardRows layout={layout} scalar={50} selectedKeys={new Set([selected])}>
           {(wrapper) => {
-            const key = wrapper.keyItem.code, mapped = key !== undefined && bindings[String(key)]?.enabled;
+            const key = wrapper.keyItem.code, mapped = key !== undefined && isMapped(bindings[String(key)]);
             const overridden = key !== undefined && overriddenKeys.includes(key);
             const pending = key !== undefined && pendingKeys.includes(key);
             const color = mapped ? feedbackColor(bindings[String(key)], overridden, feedback) : undefined;
@@ -31,7 +32,7 @@ export function KeyboardAnaloguePreview({ layout, keyboardInfo, bindings, select
             return <div key={wrapper.dataCode} className="analogue-preview-key" role={key !== undefined ? 'button' : undefined}
               tabIndex={key !== undefined ? 0 : undefined} aria-pressed={key !== undefined ? key === selected : undefined}
               aria-label={key !== undefined ? 'Map ' + getKeyInfo(key, keyboardInfo.layout, keyboardInfo.region).label : undefined}
-              title={pending ? 'Release this key to complete the mode switch' : mapped ? overridden ? 'Keyboard override · normal key enabled' : bindings[String(key)].overwriteDefault ? 'Analogue · normal key suppressed' : 'Analogue + normal key' : undefined}
+              title={pending ? 'Release this key to complete the mode switch' : mapped ? overridden ? 'Output off · normal key enabled' : (bindings[String(key)].extraKey !== undefined ? 'Extra key: ' + keyboardOutputs[bindings[String(key)].extraKey!].label + ' · ' : '') + (bindings[String(key)].overwriteDefault ? 'Normal key suppressed' : 'Normal key enabled') : undefined}
               onKeyDown={(event) => { if (key !== undefined && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onSelect(key); } }}>
               <RemapKeyWrapper {...wrapper} labelColor={key === selected ? '#f4ecff' : mapped ? '#c7acee' : '#aaa3b3'} onClick={onSelect}
                 infoBadge={<>{mapped && <span className={'analogue-preview-mapped' + (pending ? ' is-pending' : '')} style={{ background: overridden || pending ? feedback.overrideColor : bindings[String(key)].overwriteDefault ? feedback.suppressedColor : feedback.activeColor }} />}

@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { Electron, Window, RecordEvent } from '../../../contracts/desktop-platform.cjs';
 import type { createAnalogue } from './analogue.cjs';
 import { errorMessage } from '../../../contracts/desktop.cjs';
+import { isMapped } from '../../../contracts/desktop-analogue.cjs';
 
 /** The window stays alive so application rules and analogue controls keep running. */
 export function createTray(
@@ -41,8 +42,8 @@ export function createTray(
       { label: 'Open OpenTKL', click: open },
       { label: 'Profiles…', click: () => navigate('profiles') },
       { type: 'separator' },
-      { label: 'Controller output', type: 'checkbox', checked: state.running,
-        enabled: Object.values(state.settings.bindings).some(binding => binding.enabled) && !state.transitioning,
+      { label: 'Mapped output', type: 'checkbox', checked: state.running,
+        enabled: Object.values(state.settings.bindings).some(isMapped) && !state.transitioning,
         click: () => { void analogue.enable(!state.running).catch(error => {
           record('tray-controller-error', errorMessage(error));
           navigate('analogue');

@@ -33,12 +33,12 @@ test('tray keeps the window alive, routes pages and pauses output through the sh
   menu.find(item => item.label === 'Profiles…').click();
   assert.deepEqual(navigation.pop(), ['keyboard:navigate', 'profiles']);
   assert.equal(shown, 1);
-  assert.equal(menu.find(item => item.label === 'Controller output').checked, true);
-  menu.find(item => item.label === 'Controller output').click();
+  assert.equal(menu.find(item => item.label === 'Mapped output').checked, true);
+  menu.find(item => item.label === 'Mapped output').click();
   await Promise.resolve();
   assert.equal(enabled, false);
   tray.emit('right-click');
-  assert.equal(menu.find(item => item.label === 'Controller output').checked, false);
+  assert.equal(menu.find(item => item.label === 'Mapped output').checked, false);
   menu.find(item => item.label === 'Start with Windows').click();
   assert.equal(startup.openAtLogin, true);
   assert.ok(startup.args.includes('--hidden'));

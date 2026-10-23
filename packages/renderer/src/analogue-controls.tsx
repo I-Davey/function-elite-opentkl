@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyboardHost } from '../../contracts/desktop-host.cjs';
-import { binding, channels, axes, buttons, isButton, isStick, emptyProfile, evaluate, clamp, feedbackColor,
+import { binding, channels, axes, buttons, isButton, isStick, isMapped, emptyProfile, evaluate, clamp, feedbackColor,
   type AnalogueProfile, type AnalogueState, type Binding, type Channel } from '../../contracts/desktop-analogue.cjs';
 import type { KeyboardViewPort } from '../../sensor-monitor/src/types.js';
 import { getKeyInfo } from '../../keyboard-ui/src/layouts/keyInfo.js';
 import { jsKeyToKeyMap } from '../../keyboard-ui/src/layouts/keyboardInfo.js';
 import { KeyboardAnaloguePreview } from '../../keyboard-ui/src/components/KeyboardAnaloguePreview.js';
 import { AngleDownIcon } from '../../keyboard-ui/src/components/icons/AngleDownIcon.js';
+import { keyboardOutputs } from '../../contracts/desktop-keyboard.cjs';
 
 type ResponseCurve = Pick<Binding, 'startMm' | 'endMm' | 'curve' | 'strength' | 'points' | 'outputMin' | 'outputMax' | 'smoothMs'>;
 const pendingEditors = new Set<() => Promise<void>>();
@@ -142,18 +143,18 @@ export function AnalogueLightingFeedback({ host, profileId }: { host: KeyboardHo
   const { settings, state, ready, busy, error, update } = useAnalogueProfile(host, profileId);
   const change = (patch: Partial<AnalogueProfile['feedback']>) => update({ ...settings, feedback: { ...settings.feedback, ...patch } });
   return <details id="analogue-lighting-feedback" className="analog-feedback-settings">
-    {settings.feedback.enabled && <style>{Object.entries(settings.bindings).filter(([, binding]) => binding.enabled).map(([key, binding]) =>
+    {settings.feedback.enabled && <style>{Object.entries(settings.bindings).filter(([, binding]) => isMapped(binding)).map(([key, binding]) =>
       `.keyboard-preview-card [data-code="key-${key}"]::after{content:"";position:absolute;inset:5px;pointer-events:none;z-index:1;border-radius:3px;opacity:.4;background:${feedbackColor(binding, state?.overriddenKeys.includes(Number(key)) ?? false, settings.feedback)}}`
     ).join('\n')}</style>}
     <summary><strong>Analogue feedback</strong><span>{settings.feedback.enabled ? 'On' : 'Off'}</span></summary>
     <fieldset disabled={!ready || busy} className="analog-editor-fields">
-      <label className="analog-check"><input type="checkbox" checked={settings.feedback.enabled} onChange={event => change({ enabled: event.target.checked })} />Show controller output on mapped keys</label>
+      <label className="analog-check"><input type="checkbox" checked={settings.feedback.enabled} onChange={event => change({ enabled: event.target.checked })} />Show output mode on mapped keys</label>
       <div className="analog-feedback-colors">{([
-        ['activeColor', 'Controller + normal key'], ['suppressedColor', 'Controller only'], ['overrideColor', 'Controller off'],
+        ['activeColor', 'Output + normal key'], ['suppressedColor', 'Output only'], ['overrideColor', 'Output off'],
       ] as const).map(([name, label]) => <label key={name}><input type="color" value={settings.feedback[name]} onChange={event => change({ [name]: event.target.value })} /><span>{label}</span></label>)}</div>
       <div className="analog-pair-fields"><NumberField label="Brightness" value={settings.feedback.brightness * 100} min={0} max={100} step={1} unit="%" onChange={value => change({ brightness: value / 100 })} />
         <NumberField label="Fade" value={settings.feedback.fadeMs} min={0} max={500} step={10} unit="ms" onChange={fadeMs => change({ fadeMs })} /></div>
-      <p className="analog-hint">“Controller only” applies when Overwrite default key is enabled. Brightness applies equally to all three colours.</p>
+      <p className="analog-hint">“Output only” applies when Overwrite default key is enabled. Brightness applies equally to all three colours.</p>
     </fieldset>
     {(error || state?.feedbackError) && <p className="analog-inline-error" role="alert">{error || state?.feedbackError}</p>}
   </details>;
@@ -175,7 +176,7 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
   const { layout, keyboardInfo } = keyboardView;
   const keyLabel = (code: number) => ({ 44: 'Space', 224: 'Left Ctrl', 225: 'Left Shift', 226: 'Left Alt', 228: 'Right Ctrl', 229: 'Right Shift', 230: 'Right Alt' } as Record<number, string>)[code] ?? String(getKeyInfo(code, keyboardInfo.layout, keyboardInfo.region).label || code);
   const current = settings.bindings[String(selected)] ?? binding();
-  const enabledCount = Object.values(settings.bindings).filter(b => b.enabled).length;
+  const enabledCount = Object.values(settings.bindings).filter(isMapped).length;
   const patchKey = (patch: Partial<Binding>) => update({ ...settings, bindings: { ...settings.bindings, [selected]: binding({ ...current, ...patch }) } });
   const changeOverride = (patch: Partial<AnalogueProfile['override']>) => update({ ...settings, override: { ...settings.override, ...patch } });
   const calibrate = (action: 'start' | 'capture' | 'apply' | 'cancel') => void act(async () => {
@@ -199,15 +200,15 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
         <button className="analog-lighting-link" onClick={() => onLighting(selected)}>Lighting ↗</button></strong>
         <div className="analog-toolbar-actions">
           <span className="analog-status"><span className={'connection-dot ' + (state?.connected ? 'is-connected' : '')} />
-            {state?.transitioning ? 'Release mapped keys to switch' : state?.overriddenKeys.length ? 'Controller off' : state?.calibration ? 'Calibrating' : state?.running ? state.connected ? 'Live · ' + state.rateHz.toFixed(0) + ' Hz' : 'Waiting for keys' : state?.preview ? 'Preview' : 'Off'}</span>
+            {state?.transitioning ? 'Release mapped keys to switch' : state?.overriddenKeys.length ? 'Output off' : state?.calibration ? 'Calibrating' : state?.running ? state.connected ? 'Live · ' + state.rateHz.toFixed(0) + ' Hz' : 'Waiting for keys' : state?.preview ? 'Preview' : 'Off'}</span>
           {!saved && <span className="analog-save-state">Saving…</span>}
           <div className="analog-output-control">
           <label className="analog-output-toggle"><input type="checkbox" checked={state?.running ?? false}
             disabled={busy || !ready || state?.preview || (!state?.running && enabledCount === 0)}
-            onChange={(event) => { const enabled = event.target.checked; void act(async () => setState(await host.analogueEnable(enabled))); }} />Controller output</label>
+            onChange={(event) => { const enabled = event.target.checked; void act(async () => setState(await host.analogueEnable(enabled))); }} />Mapped output</label>
           <details className="analog-popover analog-override-menu"><summary title="In-game override settings" aria-label="In-game override settings"><AngleDownIcon aria-hidden="true" focusable="false" /></summary>
             <div className="analog-popover-content">
-              <strong>Controller shortcut</strong>
+              <strong>Output shortcut</strong>
               <fieldset className="analog-editor-fields" disabled={!ready || busy}>
               <label className="analog-check"><input type="checkbox" disabled={!ready || busy} checked={settings.override.enabled} onChange={event => changeOverride({ enabled: event.target.checked })} />Enable shortcut</label>
               <label className="analog-field"><span>Shortcut</span><button className="shell-button" aria-pressed={capturingShortcut}
@@ -224,7 +225,7 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
                   event.preventDefault(); event.stopPropagation();
                   if (captured.current.length) { changeOverride({ shortcut: [...captured.current] }); setCapturingShortcut(false); }
                 }}>{capturingShortcut ? 'Press shortcut…' : settings.override.shortcut.map(keyLabel).join(' + ') || 'Choose shortcut'}</button></label>
-              <p className="analog-hint">Toggles all controller controls on or off, including in-game. After a sensor timeout, release the shortcut and press it again to retry. Normal keys return when released. Use unmapped shortcut keys.</p>
+              <p className="analog-hint">Toggles controller controls and extra keys together, including in-game. After a sensor timeout, release the shortcut and press it again to retry. Normal keys return when released. Use unmapped shortcut keys.</p>
               </fieldset>
             </div>
           </details>
@@ -233,7 +234,7 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
       <div className="analogue-keyboard-surface">
         <KeyboardAnaloguePreview layout={layout} keyboardInfo={keyboardInfo} bindings={settings.bindings} selected={selected}
           depths={state?.connected ? state.rawMm : {}} overriddenKeys={state?.overriddenKeys ?? []}
-          pendingKeys={state?.transitioning ? Object.entries(settings.bindings).filter(([, b]) => b.enabled).map(([key]) => Number(key)) : []}
+          pendingKeys={state?.transitioning ? Object.entries(settings.bindings).filter(([, b]) => isMapped(b)).map(([key]) => Number(key)) : []}
           feedback={settings.feedback} onSelect={key => { if (!state?.calibration) setSelected(key); }} />
       </div>
     </div>
@@ -241,7 +242,11 @@ export function AnalogueControls({ host, keyboardView, profileId, onLighting }: 
       <div className="analog-edit-grid">
         <section className="analog-card analog-mapping-card">
           <div className="analog-section-heading"><div className="analog-selected-key">{keyLabel(selected)}</div>
-            <label className="analog-switch"><span>Analogue key</span><input type="checkbox" role="switch" checked={current.enabled} onChange={(e) => patchKey({ enabled: e.target.checked })} /><span className="analog-switch-track" /></label></div>
+            <label className="analog-switch"><span>Controller mapping</span><input type="checkbox" role="switch" checked={current.enabled} onChange={(e) => patchKey({ enabled: e.target.checked })} /><span className="analog-switch-track" /></label></div>
+          <label className="analog-field"><span>Extra key</span><select value={current.extraKey ?? ''} onChange={event => patchKey({ extraKey: event.target.value === '' ? undefined : Number(event.target.value) })}>
+            <option value="">None</option>{Object.entries(keyboardOutputs).filter(([key]) => Number(key) !== selected).map(([key, output]) => <option key={key} value={key}>{output.label}</option>)}
+          </select></label>
+          {current.extraKey !== undefined && <p className="analog-hint">Adds {keyboardOutputs[current.extraKey].label} at Start travel. The override shortcut disables it too. Keep Overwrite default key off to send both keys.</p>}
           <label className="analog-field"><span>Controller control</span><select value={current.channel} onChange={(e) => patchKey({ channel: e.target.value as Channel })}>
             <optgroup label="Sticks & triggers">{Object.keys(axes).map((channel) => <option value={channel} key={channel}>{channels[channel as Channel]}</option>)}</optgroup>
             <optgroup label="Buttons">{Object.keys(buttons).map((channel) => <option value={channel} key={channel}>{channels[channel as Channel]}</option>)}</optgroup>
